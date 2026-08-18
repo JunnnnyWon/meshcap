@@ -99,8 +99,9 @@ export function Dropzone({
           <p className="mt-1.5 font-mono text-[11.5px] text-ink-400">
             GLB · GLTF · OBJ · STL · PLY
           </p>
-          <p className="mt-4 text-[11.5px] text-ink-600">
-            모든 처리는 브라우저 안에서 끝납니다. 파일이 서버로 전송되지 않습니다.
+          <p className="mt-4 text-[11.5px] text-ink-600 max-w-[420px] mx-auto leading-relaxed">
+            기본은 브라우저 안에서 처리합니다. 큰 모델은 팀 서버로 보낼 수 있는데, 그때도
+            좌표와 인덱스만 가고 원본 파일과 텍스처는 전송되지 않습니다.
           </p>
         </div>
 

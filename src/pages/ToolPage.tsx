@@ -4,10 +4,11 @@ import { Viewer, type FocusRequest } from '../components/Viewer.tsx';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel.tsx';
 import { ScoreCard } from '../components/ScoreCard.tsx';
 import { HoleList } from '../components/HoleList.tsx';
-import { Button, SegmentedControl } from '../components/ui.tsx';
+import { Badge, Button, SegmentedControl } from '../components/ui.tsx';
 import { loadMeshFromFile } from '../io/loadMesh.ts';
 import { derivedFileName, downloadBlob, toBinarySTL, toGLB } from '../io/exportMesh.ts';
 import { runPipelineInWorker } from '../worker/client.ts';
+import { probeServer, repairOnServer, type ServerInfo } from '../net/remote.ts';
 import { STAGE_LABEL, type HoleReport, type PipelineResult, type PipelineStage } from '../core/pipeline.ts';
 import { triangleCount } from '../core/types.ts';
 import type { UpAxis } from '../core/classify.ts';
@@ -23,12 +24,48 @@ interface Source {
   origin: 'file' | 'sample';
 }
 
+export type Engine = 'auto' | 'browser' | 'server';
+
+/** 이 아래로는 어떤 기기에서도 브라우저가 금방 끝낸다. 굳이 내보낼 이유가 없다. */
+const BROWSER_COMFORTABLE_TRIANGLES = 500_000;
+
+/** 이 위로는 브라우저 메모리가 위태로워 여유 있는 기기라도 서버로 보낸다. */
+const BROWSER_RISKY_TRIANGLES = 4_000_000;
+
+/**
+ * 자동 모드에서 어디서 계산할지 정한다.
+ *
+ * 서버가 무조건 빠른 것이 아니다. 파이프라인은 단일 스레드라 코어 수가 도움이
+ * 되지 않고, 실측에서 서버(Ryzen 5 5600)가 최신 노트북보다 오히려 느렸다.
+ * 게다가 삼백만 삼각형이면 좌표만 140메가바이트를 실어 보내야 한다.
+ *
+ * 그래서 서버는 빠르라고 쓰는 것이 아니라, 브라우저가 감당하지 못할 때 쓴다.
+ * 기기가 넉넉하면 큰 모델이라도 그냥 브라우저에서 끝내는 편이 빠르다.
+ */
+function shouldOffload(triangles: number, hasServer: boolean): boolean {
+  if (!hasServer) return false;
+  if (triangles <= BROWSER_COMFORTABLE_TRIANGLES) return false;
+  if (triangles > BROWSER_RISKY_TRIANGLES) return true;
+
+  const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
+  // deviceMemory는 크롬 계열에서만 오고 8에서 잘린다. 없으면 넉넉한 쪽으로 본다.
+  const memoryGB = navigatorWithMemory.deviceMemory ?? 8;
+  const cores = navigator.hardwareConcurrency || 4;
+
+  return memoryGB < 8 || cores < 8;
+}
+
 export function ToolPage() {
   const [source, setSource] = useState<Source | null>(null);
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [stage, setStage] = useState<PipelineStage | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const [engine, setEngine] = useState<Engine>('auto');
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
+  const [usedEngine, setUsedEngine] = useState<'browser' | 'server' | null>(null);
 
   const [upAxis, setUpAxis] = useState<UpAxis>('y');
   const [flatBase, setFlatBase] = useState(true);
@@ -40,33 +77,77 @@ export function ToolPage() {
 
   const runToken = useRef(0);
 
+  // 서버가 붙어 있는지 한 번만 확인한다. 없으면 브라우저 처리만 남는다.
+  useEffect(() => {
+    void probeServer().then(setServerInfo);
+  }, []);
+
   const analyze = useCallback(
-    async (mesh: MeshData, axis: UpAxis, useFlatBase: boolean) => {
+    async (mesh: MeshData, axis: UpAxis, useFlatBase: boolean, preference: Engine, server: ServerInfo | null) => {
       const token = ++runToken.current;
+      const options = { upAxis: axis, disableFlatBase: !useFlatBase };
+      const triangles = triangleCount(mesh);
+
+      const wantsServer =
+        preference === 'server' || (preference === 'auto' && shouldOffload(triangles, server !== null));
+
       setBusy(true);
-      setStage(null);
+      setStatus(null);
       setError(null);
+      setNotice(null);
+
+      const runLocally = async () => {
+        const value = await runPipelineInWorker(mesh, options, (stage: PipelineStage) => {
+          if (token === runToken.current) setStatus(STAGE_LABEL[stage]);
+        });
+        return { value, engine: 'browser' as const };
+      };
 
       try {
-        const next = await runPipelineInWorker(
-          mesh,
-          { upAxis: axis, disableFlatBase: !useFlatBase },
-          (current) => {
-            if (token === runToken.current) setStage(current);
-          },
-        );
+        let outcome: { value: PipelineResult; engine: 'browser' | 'server' };
+
+        if (wantsServer && server) {
+          try {
+            const value = await repairOnServer(mesh, options, (progress) => {
+              if (token !== runToken.current) return;
+              if (progress.phase === 'upload') {
+                setStatus(`서버로 보내는 중 ${Math.round((progress.uploaded ?? 0) * 100)}%`);
+              } else if (progress.phase === 'compute') {
+                setStatus('연산 서버가 처리하는 중');
+              } else {
+                setStatus('결과를 받는 중');
+              }
+            });
+            outcome = { value, engine: 'server' };
+          } catch (serverError) {
+            // 서버가 죽어 있어도 도구는 계속 쓸 수 있어야 한다.
+            if (token !== runToken.current) return;
+            setNotice(
+              `${serverError instanceof Error ? serverError.message : '연산 서버 오류'} 브라우저에서 대신 처리했습니다.`,
+            );
+            outcome = await runLocally();
+          }
+        } else {
+          if (wantsServer && !server) {
+            setNotice('연산 서버에 연결할 수 없어 브라우저에서 처리했습니다.');
+          }
+          outcome = await runLocally();
+        }
+
         if (token !== runToken.current) return;
-        setResult(next);
+        setResult(outcome.value);
+        setUsedEngine(outcome.engine);
         setMode('before');
         setSelectedHole(null);
       } catch (err) {
         if (token !== runToken.current) return;
         setError(err instanceof Error ? err.message : '메시를 처리하지 못했습니다.');
         setResult(null);
+        setUsedEngine(null);
       } finally {
         if (token === runToken.current) {
           setBusy(false);
-          setStage(null);
+          setStatus(null);
         }
       }
     },
@@ -87,13 +168,13 @@ export function ToolPage() {
           origin: 'file',
         });
         setUpAxis(loaded.suggestedUpAxis);
-        await analyze(loaded.mesh, loaded.suggestedUpAxis, flatBase);
+        await analyze(loaded.mesh, loaded.suggestedUpAxis, flatBase, engine, serverInfo);
       } catch (err) {
         setError(err instanceof Error ? err.message : '파일을 읽지 못했습니다.');
         setBusy(false);
       }
     },
-    [analyze, flatBase],
+    [analyze, flatBase, engine, serverInfo],
   );
 
   const handleSample = useCallback(
@@ -107,16 +188,16 @@ export function ToolPage() {
         origin: 'sample',
       });
       setUpAxis(sample.upAxis);
-      await analyze(mesh, sample.upAxis, flatBase);
+      await analyze(mesh, sample.upAxis, flatBase, engine, serverInfo);
     },
-    [analyze, flatBase],
+    [analyze, flatBase, engine, serverInfo],
   );
 
   const reanalyze = useCallback(
-    (axis: UpAxis, useFlatBase: boolean) => {
-      if (source) void analyze(source.mesh, axis, useFlatBase);
+    (axis: UpAxis, useFlatBase: boolean, preference: Engine = engine) => {
+      if (source) void analyze(source.mesh, axis, useFlatBase, preference, serverInfo);
     },
-    [analyze, source],
+    [analyze, source, engine, serverInfo],
   );
 
   const viewerInput = useMemo(() => {
@@ -213,7 +294,7 @@ export function ToolPage() {
             <div className="text-center">
               <div className="flex items-center justify-center gap-3 text-[13px] text-ink-200">
                 <span className="w-3 h-3 rounded-full border-2 border-amber-accent border-t-transparent animate-spin" />
-                {stage ? STAGE_LABEL[stage] : '모델을 읽는 중'}
+                {status ?? '모델을 읽는 중'}
               </div>
               {heavyMesh && (
                 <p className="mt-2.5 text-[11.5px] text-ink-400 max-w-[280px]">
@@ -273,12 +354,59 @@ export function ToolPage() {
           </label>
         </section>
 
+        <section className="px-4 py-3 border-b border-ink-800">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <span className="label-caps">연산 위치</span>
+            {usedEngine && (
+              <Badge tone={usedEngine === 'server' ? 'patch' : 'neutral'}>
+                {usedEngine === 'server' ? '서버에서 처리됨' : '브라우저에서 처리됨'}
+              </Badge>
+            )}
+          </div>
+
+          <SegmentedControl
+            options={[
+              { id: 'auto', label: '자동' },
+              { id: 'browser', label: '브라우저' },
+              { id: 'server', label: '연산 서버' },
+            ]}
+            value={engine}
+            onChange={(next) => {
+              setEngine(next);
+              reanalyze(upAxis, flatBase, next);
+            }}
+          />
+
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-600">
+            {engine === 'browser'
+              ? '모든 계산이 브라우저 안에서 끝나고 기하가 전송되지 않습니다.'
+              : engine === 'server'
+                ? '좌표와 인덱스를 팀 서버로 보내 처리합니다. 텍스처와 원본 파일은 보내지 않습니다.'
+                : serverInfo
+                  ? '큰 모델이면서 이 기기의 메모리나 코어가 빠듯할 때만 서버로 보냅니다. 서버가 더 빠른 것은 아니라서, 여유 있는 기기에서는 그냥 브라우저에서 끝내는 편이 낫습니다.'
+                  : '연산 서버에 연결되지 않아 브라우저에서만 처리합니다.'}
+          </p>
+
+          {serverInfo && (
+            <p className="mt-1 font-mono text-[10.5px] text-ink-700">
+              서버 {serverInfo.cores}코어 · 메모리 {(serverInfo.totalMemoryMB / 1024).toFixed(0)}GB · 최대{' '}
+              {serverInfo.maxUploadMB}MB
+            </p>
+          )}
+        </section>
+
         {error && (
           <div
             role="alert"
             className="mx-4 my-3 rounded-lg border border-flaw/30 bg-flaw/8 px-3 py-2.5 text-[12px] text-flaw"
           >
             {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="mx-4 my-3 rounded-lg border border-amber-accent/30 bg-amber-accent/8 px-3 py-2.5 text-[12px] text-amber-accent">
+            {notice}
           </div>
         )}
 
