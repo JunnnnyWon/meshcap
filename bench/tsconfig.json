@@ -1,0 +1,9 @@
+{
+  // 벤치마크 스크립트만 node에서 실행되므로 node 전역 타입을 여기서만 켠다.
+  // 브라우저 코드가 실수로 fs나 process에 손대는 것을 막기 위한 분리다.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["."]
+}

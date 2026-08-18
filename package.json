@@ -6,11 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p bench/tsconfig.json",
     "bench": "tsx bench/run.ts"
   },
   "keywords": [
@@ -29,6 +29,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/earcut": "^3.0.0",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@types/three": "^0.185.4",
