@@ -57,6 +57,14 @@ npm run build
 
 `main`에 푸시하면 GitHub Actions가 테스트를 돌리고 GitHub Pages로 배포합니다.
 
+최종 리포트도 스크립트로 만듭니다. 본문에 인용하는 수치를 `src/bench/results.json`에서 직접 읽어오므로, 알고리즘을 고치고 측정을 다시 돌리면 문서의 숫자도 함께 갱신됩니다.
+
+```bash
+npm run dev                 # 다른 터미널에서 개발 서버를 띄운 뒤
+node docs/capture.mjs       # 화면 캡처 → docs/figures/
+bash docs/build-report.sh   # → docs/MeshCap_최종리포트.docx
+```
+
 ## 구조
 
 ```
