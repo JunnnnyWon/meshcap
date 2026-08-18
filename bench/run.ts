@@ -53,6 +53,8 @@ console.table(
     '용접만': m.variants.weldOnly.score,
     '순진한 부채꼴': m.variants.naiveFan.score,
     MeshCap: m.variants.meshcap.score,
-    '구멍 수': m.variants.weldOnly.holes,
+    // 정렬 전에는 뒤집힌 면의 둘레까지 구멍으로 잡힌다.
+    '정렬 전 테두리': m.variants.weldOnly.holes,
+    '실제 구멍': Object.values(m.strategyCounts).reduce((sum, n) => sum + n, 0),
   })),
 );

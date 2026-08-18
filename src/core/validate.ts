@@ -1,5 +1,5 @@
 import { buildTopology } from './halfEdge.ts';
-import { traceBoundaryLoops } from './boundary.ts';
+import { countBoundaryLoops } from './boundary.ts';
 import { computeBounds, type MeshData } from './types.ts';
 
 export interface ValidationReport {
@@ -40,7 +40,9 @@ const DEFAULT_SELF_INTERSECTION_LIMIT = 600_000;
 
 export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): ValidationReport {
   const topology = buildTopology(mesh);
-  const loops = traceBoundaryLoops(topology);
+  // 개수만 쓰므로 정점 목록은 만들지 않는다. 정점이 쪼개진 원본에서는 테두리가
+  // 수백만 개로 잡히는데, 그때마다 배열을 만들면 진단 한 번에 메모리가 바닥난다.
+  const boundaryLoopCount = countBoundaryLoops(topology);
   const bounds = computeBounds(mesh.positions);
 
   const { positions, indices } = mesh;
@@ -96,7 +98,7 @@ export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): Val
     triangleCount: topology.triangleCount,
     edgeCount: topology.edgeCount,
     boundaryEdgeCount: topology.boundaryEdgeCount,
-    boundaryLoopCount: loops.length,
+    boundaryLoopCount,
     nonManifoldEdgeCount: topology.nonManifoldEdgeCount,
     nonManifoldVertexCount: topology.nonManifoldVertexCount,
     inconsistentEdgeCount: topology.inconsistentEdgeCount,

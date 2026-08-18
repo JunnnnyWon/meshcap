@@ -8,7 +8,8 @@ import { Button, SegmentedControl } from '../components/ui.tsx';
 import { loadMeshFromFile } from '../io/loadMesh.ts';
 import { derivedFileName, downloadBlob, toBinarySTL, toGLB } from '../io/exportMesh.ts';
 import { runPipelineInWorker } from '../worker/client.ts';
-import type { HoleReport, PipelineResult } from '../core/pipeline.ts';
+import { STAGE_LABEL, type HoleReport, type PipelineResult, type PipelineStage } from '../core/pipeline.ts';
+import { triangleCount } from '../core/types.ts';
 import type { UpAxis } from '../core/classify.ts';
 import type { MeshData } from '../core/types.ts';
 import type { SampleModel } from '../samples/index.ts';
@@ -26,6 +27,7 @@ export function ToolPage() {
   const [source, setSource] = useState<Source | null>(null);
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<PipelineStage | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [upAxis, setUpAxis] = useState<UpAxis>('y');
@@ -42,13 +44,17 @@ export function ToolPage() {
     async (mesh: MeshData, axis: UpAxis, useFlatBase: boolean) => {
       const token = ++runToken.current;
       setBusy(true);
+      setStage(null);
       setError(null);
 
       try {
-        const next = await runPipelineInWorker(mesh, {
-          upAxis: axis,
-          disableFlatBase: !useFlatBase,
-        });
+        const next = await runPipelineInWorker(
+          mesh,
+          { upAxis: axis, disableFlatBase: !useFlatBase },
+          (current) => {
+            if (token === runToken.current) setStage(current);
+          },
+        );
         if (token !== runToken.current) return;
         setResult(next);
         setMode('before');
@@ -58,7 +64,10 @@ export function ToolPage() {
         setError(err instanceof Error ? err.message : '메시를 처리하지 못했습니다.');
         setResult(null);
       } finally {
-        if (token === runToken.current) setBusy(false);
+        if (token === runToken.current) {
+          setBusy(false);
+          setStage(null);
+        }
       }
     },
     [],
@@ -147,6 +156,9 @@ export function ToolPage() {
     return <Dropzone onFile={handleFile} onSample={handleSample} error={error} busy={busy} />;
   }
 
+  // 백만 삼각형이 넘어가면 처리에 수 초가 걸리고 뷰어도 무거워진다.
+  const heavyMesh = triangleCount(source.mesh) > 1_000_000;
+
   return (
     <div className="flex-1 flex flex-col lg:flex-row min-h-0">
       <div className="relative flex-1 min-h-[420px] lg:min-h-0 bg-ink-900">
@@ -198,9 +210,16 @@ export function ToolPage() {
 
         {busy && (
           <div className="absolute inset-0 flex items-center justify-center bg-ink-950/60 backdrop-blur-sm">
-            <div className="flex items-center gap-3 text-[13px] text-ink-300">
-              <span className="w-3 h-3 rounded-full border-2 border-amber-accent border-t-transparent animate-spin" />
-              메시를 분석하고 있습니다
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-3 text-[13px] text-ink-200">
+                <span className="w-3 h-3 rounded-full border-2 border-amber-accent border-t-transparent animate-spin" />
+                {stage ? STAGE_LABEL[stage] : '모델을 읽는 중'}
+              </div>
+              {heavyMesh && (
+                <p className="mt-2.5 text-[11.5px] text-ink-400 max-w-[280px]">
+                  삼각형이 {triangleCount(source.mesh).toLocaleString('ko-KR')}개라 몇 초 걸립니다.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -213,7 +232,7 @@ export function ToolPage() {
               {source.name}
             </div>
             <div className="font-mono text-[11px] text-ink-400 mt-0.5">
-              {formatBytes(source.byteSize)}
+              {formatBytes(source.byteSize)} · 삼각형 {triangleCount(source.mesh).toLocaleString('ko-KR')}
               {source.partCount > 1 && ` · 서브메시 ${source.partCount}개`}
             </div>
           </div>
@@ -255,7 +274,10 @@ export function ToolPage() {
         </section>
 
         {error && (
-          <div className="mx-4 my-3 rounded-lg border border-flaw/30 bg-flaw/8 px-3 py-2.5 text-[12px] text-flaw">
+          <div
+            role="alert"
+            className="mx-4 my-3 rounded-lg border border-flaw/30 bg-flaw/8 px-3 py-2.5 text-[12px] text-flaw"
+          >
             {error}
           </div>
         )}

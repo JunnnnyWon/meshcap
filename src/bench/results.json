@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-18T09:24:52.321Z",
+  "generatedAt": "2026-08-18T10:36:20.326Z",
   "note": "합성 대조군. 실제 서비스 출력물은 웹 벤치마크 페이지에서 측정해 병합한다.",
   "models": [
     {
@@ -41,7 +41,7 @@
           "volume": 4.166781805604081,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 5.4
+          "elapsedMs": 3.91
         },
         "naiveFan": {
           "vertices": 1490,
@@ -57,7 +57,7 @@
           "volume": 4.166781805604081,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 7.56
+          "elapsedMs": 2.5
         },
         "meshcap": {
           "vertices": 1490,
@@ -73,7 +73,7 @@
           "volume": 4.166781805604081,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 8.93
+          "elapsedMs": 4.57
         }
       },
       "strategyCounts": {},
@@ -113,7 +113,7 @@
           "triangles": 2677,
           "addedTriangles": -48,
           "boundaryEdges": 221,
-          "holes": 9,
+          "holes": 10,
           "nonManifoldEdges": 0,
           "inconsistentEdges": 0,
           "components": 1,
@@ -122,23 +122,23 @@
           "volume": 3.8765764816056536,
           "score": 64,
           "grade": "D",
-          "elapsedMs": 2.53
+          "elapsedMs": 0.9
         },
         "naiveFan": {
-          "vertices": 1450,
+          "vertices": 1451,
           "triangles": 2898,
           "addedTriangles": 173,
           "boundaryEdges": 0,
           "holes": 0,
-          "nonManifoldEdges": 2,
+          "nonManifoldEdges": 0,
           "inconsistentEdges": 0,
           "components": 1,
           "degenerateTriangles": 0,
           "watertight": true,
-          "volume": 4.155239085559564,
-          "score": 99,
+          "volume": 4.159886237794388,
+          "score": 100,
           "grade": "A",
-          "elapsedMs": 18.58
+          "elapsedMs": 15.83
         },
         "meshcap": {
           "vertices": 1441,
@@ -151,20 +151,20 @@
           "components": 1,
           "degenerateTriangles": 0,
           "watertight": true,
-          "volume": 4.161297588396113,
+          "volume": 4.161458447962519,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 18.92
+          "elapsedMs": 14.35
         }
       },
       "strategyCounts": {
-        "planar": 9
+        "planar": 10
       },
       "weld": {
         "mergedVertices": 6734,
         "mergedRatio": 0.8237308868501529
       },
-      "largestHoleRelativeSize": 1.4065
+      "largestHoleRelativeSize": 1.4038
     },
     {
       "id": "syn-bust",
@@ -180,7 +180,7 @@
           "triangles": 759,
           "addedTriangles": 0,
           "boundaryEdges": 1209,
-          "holes": 319,
+          "holes": 276,
           "nonManifoldEdges": 0,
           "inconsistentEdges": 65,
           "components": 254,
@@ -196,32 +196,32 @@
           "triangles": 759,
           "addedTriangles": 0,
           "boundaryEdges": 101,
-          "holes": 5,
+          "holes": 86,
           "nonManifoldEdges": 0,
           "inconsistentEdges": 130,
           "components": 1,
           "degenerateTriangles": 0,
           "watertight": false,
           "volume": 1.0510057998913154,
-          "score": 39,
+          "score": 25,
           "grade": "F",
-          "elapsedMs": 1.17
+          "elapsedMs": 0.88
         },
         "naiveFan": {
-          "vertices": 430,
-          "triangles": 793,
-          "addedTriangles": 34,
-          "boundaryEdges": 67,
-          "holes": 3,
-          "nonManifoldEdges": 0,
-          "inconsistentEdges": 130,
+          "vertices": 432,
+          "triangles": 956,
+          "addedTriangles": 197,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 136,
+          "inconsistentEdges": 0,
           "components": 1,
           "degenerateTriangles": 0,
-          "watertight": false,
-          "volume": 1.102362528619246,
-          "score": 40,
-          "grade": "F",
-          "elapsedMs": 4.59
+          "watertight": true,
+          "volume": 1.2774673572820394,
+          "score": 75,
+          "grade": "C",
+          "elapsedMs": 10.51
         },
         "meshcap": {
           "vertices": 428,
@@ -237,7 +237,7 @@
           "volume": 1.2946825960042574,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 10.64
+          "elapsedMs": 6.89
         }
       },
       "strategyCounts": {
@@ -289,7 +289,7 @@
           "volume": 1.8419855768924054,
           "score": 65,
           "grade": "D",
-          "elapsedMs": 0.11
+          "elapsedMs": 0.02
         },
         "naiveFan": {
           "vertices": 98,
@@ -305,7 +305,7 @@
           "volume": 2.762978357714242,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 3.79
+          "elapsedMs": 3.64
         },
         "meshcap": {
           "vertices": 144,
@@ -321,7 +321,7 @@
           "volume": 3.135401779497441,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 12.5
+          "elapsedMs": 13.32
         }
       },
       "strategyCounts": {
@@ -364,54 +364,54 @@
           "triangles": 3680,
           "addedTriangles": -64,
           "boundaryEdges": 566,
-          "holes": 46,
+          "holes": 472,
           "nonManifoldEdges": 0,
           "inconsistentEdges": 788,
           "components": 1,
           "degenerateTriangles": 0,
           "watertight": false,
           "volume": 2.755203034199836,
-          "score": 34,
+          "score": 25,
           "grade": "F",
-          "elapsedMs": 5.42
+          "elapsedMs": 0.68
         },
         "naiveFan": {
-          "vertices": 2125,
-          "triangles": 3680,
-          "addedTriangles": -64,
-          "boundaryEdges": 566,
-          "holes": 46,
-          "nonManifoldEdges": 0,
-          "inconsistentEdges": 788,
-          "components": 1,
-          "degenerateTriangles": 0,
-          "watertight": false,
-          "volume": 2.755203034199836,
-          "score": 34,
-          "grade": "F",
-          "elapsedMs": 9.5
-        },
-        "meshcap": {
-          "vertices": 2303,
-          "triangles": 4572,
-          "addedTriangles": 828,
+          "vertices": 2156,
+          "triangles": 4940,
+          "addedTriangles": 1196,
           "boundaryEdges": 0,
           "holes": 0,
-          "nonManifoldEdges": 0,
+          "nonManifoldEdges": 882,
           "inconsistentEdges": 0,
           "components": 1,
-          "degenerateTriangles": 2,
+          "degenerateTriangles": 0,
           "watertight": true,
-          "volume": 4.2764101856375305,
-          "score": 96,
-          "grade": "A",
-          "elapsedMs": 28.16
+          "volume": 4.098582989679699,
+          "score": 75,
+          "grade": "C",
+          "elapsedMs": 52.24
+        },
+        "meshcap": {
+          "vertices": 2279,
+          "triangles": 4526,
+          "addedTriangles": 782,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 2,
+          "inconsistentEdges": 1,
+          "components": 1,
+          "degenerateTriangles": 3,
+          "watertight": true,
+          "volume": 4.261557484155614,
+          "score": 88,
+          "grade": "B",
+          "elapsedMs": 30.18
         }
       },
       "strategyCounts": {
-        "planar": 10,
-        "flatBase": 4,
-        "liepa": 1
+        "planar": 9,
+        "flatBase": 3,
+        "liepa": 2
       },
       "weld": {
         "mergedVertices": 9107,

@@ -7,6 +7,13 @@ const data = rawResults as BenchmarkFile;
 const bust = data.models.find((m) => m.id === 'syn-bust');
 const splitOnly = data.models.find((m) => m.id === 'syn-split-only');
 
+/** 분류기가 실제로 메운 구멍 수. 정렬 전 테두리 개수와 비교하기 위한 값이다. */
+const realHoles = (id: string): number => {
+  const model = data.models.find((m) => m.id === id);
+  if (!model) return 0;
+  return Object.values(model.strategyCounts).reduce((sum, n) => sum + n, 0);
+};
+
 export function MethodPage() {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -48,19 +55,45 @@ export function MethodPage() {
           </p>
         </Section>
 
-        <Section number="02" title="법선 정렬이 구멍 탐지보다 먼저인 이유">
+        <Section number="02" title="테두리를 복원하는 방법">
           <p>
-            이 순서는 처음에 반대로 두었다가 바로잡은 부분입니다. 감는 방향이 뒤집힌 면이 구멍
-            테두리에 닿아 있으면, 그 지점에서 경계 에지의 진행 방향이 반대로 뒤집힙니다. 테두리를
-            따라가던 탐색이 거기서 갈 곳을 잃고, 하나였던 구멍이 여러 개의 열린 사슬로 쪼개집니다.
-            열린 사슬은 어디까지가 구멍인지 알 수 없어 안전하게 메울 수 없습니다.
+            구멍의 테두리는 &ldquo;한 면만 접한 에지&rdquo;를 모으는 것으로 충분해 보입니다. 실제
+            모델에서는 그렇지 않습니다. 면 셋이 한 에지를 공유하는 비다양체 지점이 있으면 그 에지는
+            어느 정의로도 경계가 아닌데, 테두리를 따라가던 순회는 바로 그 자리에서 갈 곳을 잃습니다.
+            끊긴 테두리는 어디까지가 구멍인지 확정할 수 없어 메울 수 없습니다.
+          </p>
+          <p>
+            그래서 MeshCap은 기준을 바꿔, <strong className="text-ink-100">반대 방향 짝을 찾지
+            못하고 남은 half-edge</strong>를 모읍니다. 삼각형 하나는 각 정점에 진입 하나와 진출
+            하나를 주므로 처음부터 모든 정점에서 차수가 균형을 이룹니다. 반대 방향끼리 짝을 지우는
+            연산은 양쪽 차수를 똑같이 줄이므로 균형이 그대로 유지됩니다. 균형 잡힌 유향 그래프는
+            반드시 서로소인 순환들로 분해되므로, 이렇게 모으면 순회가 어디서도 끊기지 않습니다.
+          </p>
+          <p>
+            실제 서비스 출력물에서 이 차이가 결정적입니다. Meshy가 만든 캐릭터 하나에는 비다양체
+            에지가 93개 있었는데, 기존 정의로는 경계 정점 178개 중 117개에서 차수가 어긋나 테두리가
+            전부 끊긴 사슬로 잡혔습니다. 짝이 없는 half-edge를 기준으로 바꾸자 같은 모델의 테두리
+            59개가 모두 닫혔습니다.
+          </p>
+        </Section>
+
+        <Section number="03" title="법선 정렬이 구멍 탐지보다 먼저인 이유">
+          <p>
+            테두리를 짝 없는 half-edge로 정의하고 나면, 감는 방향이 뒤집힌 면이 곧바로 문제를
+            일으킵니다. 뒤집힌 면은 자기 에지 세 개에서 방향 짝을 깨뜨립니다. 그 자리는 멀쩡히
+            막혀 있는데도 짝을 찾지 못한 half-edge가 남으므로, 탐지기 눈에는 구멍으로 보입니다.
+          </p>
+          <p>
+            그대로 메우면 없는 구멍을 막게 됩니다. 실제로는 막혀 있는 표면 위에 면이 한 겹 더
+            덧붙어 부피가 달라지고 비다양체 에지가 늘어납니다. 구멍을 못 메우는 것보다 나쁩니다.
           </p>
           {bust && (
             <Callout>
-              대조군 <strong>{bust.label}</strong>에 뒤집힌 면을 섞어 두었습니다. 정렬을 나중에 하면
-              테두리가 조각나 점수가 <Mono>{bust.variants.naiveFan.score}점</Mono>에서 멈추지만,
-              정렬을 먼저 하면 같은 모델이 <Mono>{bust.variants.meshcap.score}점</Mono>으로 완전히
-              밀폐됩니다.
+              대조군 <strong>{bust.label}</strong>에 뒤집힌 면을 섞어 두었습니다. 정렬하지 않으면
+              테두리가 <Mono>{bust.variants.weldOnly.holes}개</Mono>로 잡히지만, 방향을 맞추고 나면
+              실제 구멍은 <Mono>{realHoles('syn-bust')}개</Mono>뿐입니다. 나머지는 전부 뒤집힌 면이
+              만든 허상입니다. 점수도 <Mono>{bust.variants.naiveFan.score}점</Mono>과{' '}
+              <Mono>{bust.variants.meshcap.score}점</Mono>으로 갈립니다.
             </Callout>
           )}
           <p>
@@ -71,7 +104,7 @@ export function MethodPage() {
           </p>
         </Section>
 
-        <Section number="03" title="구멍을 분류하는 기준">
+        <Section number="04" title="구멍을 분류하는 기준">
           <p>
             모든 구멍을 같은 방법으로 메우면 반드시 어딘가가 망가집니다. 피규어 바닥의 큰 개구부를
             부채꼴로 메우면 가운데가 원뿔처럼 솟아 서포트가 붙고, 반대로 머리카락 사이의 작은 구멍을
@@ -125,7 +158,7 @@ export function MethodPage() {
           </p>
         </Section>
 
-        <Section number="04" title="네 가지 메우기 방식">
+        <Section number="05" title="네 가지 메우기 방식">
           <div className="space-y-5">
             <Strategy name="부채꼴" tone="neutral">
               테두리 중심에 정점 하나를 두고 방사형으로 잇습니다. 가장 빠르지만 구멍이 커지면 중심점이
@@ -154,7 +187,7 @@ export function MethodPage() {
           </p>
         </Section>
 
-        <Section number="05" title="출력 적합성 채점">
+        <Section number="06" title="출력 적합성 채점">
           <p>
             배점은 슬라이서가 실제로 실패하는 순서를 따랐습니다. 경계 에지가 남으면 아예 슬라이싱이
             되지 않으므로 가장 무겁고, 뒤로 갈수록 출력은 되지만 품질이 떨어지는 항목입니다.
@@ -174,12 +207,22 @@ export function MethodPage() {
           </p>
         </Section>
 
-        <Section number="06" title="알려진 한계">
+        <Section number="07" title="알려진 한계">
           <ul className="space-y-2.5 list-none pl-0">
             <Limitation>
-              테두리가 한 정점에서 여러 갈래로 갈라지는 나비넥타이 형태에서는 어느 갈래를 먼저 따라가느냐에
-              따라 구멍이 나뉘는 모양이 달라집니다. 전체를 빠짐없이 덮는다는 점은 유지되지만 분할 결과가
-              유일하지는 않습니다.
+              테두리가 한 정점에서 여러 갈래로 갈라지면 어느 갈래를 먼저 따라가느냐에 따라 구멍이
+              나뉘는 모양이 달라집니다. 순회가 반드시 닫히고 전체를 빠짐없이 덮는다는 점은
+              보장되지만, 분할 결과가 유일하지는 않습니다.
+            </Limitation>
+            <Limitation>
+              면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙어 비다양체가 더 심해집니다.
+              표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈이고, 두 항목을 채점에서 따로 두는
+              이유이기도 합니다. 실제 Tripo 출력물에서 비다양체 에지가 9개에서 90개로 늘었지만
+              경계는 14개에서 0개가 되었습니다.
+            </Limitation>
+            <Limitation>
+              겹쳐 있는 이중 표면은 같은 자리에 테두리가 두 벌 잡히고 뚜껑도 두 겹으로 생깁니다.
+              입력 자체의 병리라 현재는 감지해 점수에만 반영하고 자동으로 정리하지는 않습니다.
             </Limitation>
             <Limitation>
               바닥 받침은 테두리를 수직으로 내리므로, 투영된 테두리가 스스로 겹치는 심하게 오목한
@@ -206,7 +249,7 @@ function Pipeline() {
     { label: '정점 용접', detail: '공간 해시로 좌표가 같은 정점 병합' },
     { label: '법선 방향 통일', detail: '이웃 면끼리 감는 방향 전파' },
     { label: '위상 분석', detail: 'half-edge로 경계·비다양체·연결 요소 집계' },
-    { label: '테두리 추적', detail: '경계 half-edge를 이어 구멍 루프 복원' },
+    { label: '테두리 추적', detail: '짝 없는 half-edge를 이어 구멍 루프 복원' },
     { label: '구멍 분류', detail: '둘레 · 평면성 · 방향으로 전략 배정' },
   ];
 
@@ -238,6 +281,9 @@ function Pipeline() {
           </div>
           <div className="pb-4 flex-1">
             <div className="text-[13.5px] text-ink-100">구멍 메우기</div>
+            <div className="text-[11.5px] text-ink-400 mt-0.5">
+              뚜껑이 또 다른 틈을 남기면 남지 않을 때까지 반복
+            </div>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {['단일 삼각형', '부채꼴', '평면 투영', 'Liepa DP', '바닥 받침'].map((name) => (
                 <Badge key={name} tone="patch">

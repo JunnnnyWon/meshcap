@@ -1,5 +1,10 @@
 /// <reference lib="webworker" />
-import { runPipeline, type PipelineOptions, type PipelineResult } from '../core/pipeline.ts';
+import {
+  runPipeline,
+  type PipelineOptions,
+  type PipelineResult,
+  type PipelineStage,
+} from '../core/pipeline.ts';
 import type { MeshData } from '../core/types.ts';
 
 export interface CapWorkerRequest {
@@ -9,8 +14,9 @@ export interface CapWorkerRequest {
 }
 
 export type CapWorkerResponse =
-  | { id: number; ok: true; result: PipelineResult }
-  | { id: number; ok: false; error: string };
+  | { id: number; kind: 'progress'; stage: PipelineStage }
+  | { id: number; kind: 'done'; result: PipelineResult }
+  | { id: number; kind: 'error'; error: string };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -18,7 +24,9 @@ ctx.onmessage = (event: MessageEvent<CapWorkerRequest>) => {
   const { id, mesh, options } = event.data;
 
   try {
-    const result = runPipeline(mesh, options);
+    const result = runPipeline(mesh, options, (stage) => {
+      ctx.postMessage({ id, kind: 'progress', stage } satisfies CapWorkerResponse);
+    });
 
     // 뚜껑을 하나도 안 만들었으면 두 메시가 같은 버퍼를 공유한다.
     // 같은 버퍼를 두 번 넘기면 예외가 나므로 걸러낸다.
@@ -31,11 +39,11 @@ ctx.onmessage = (event: MessageEvent<CapWorkerRequest>) => {
       ]),
     ] as Transferable[];
 
-    ctx.postMessage({ id, ok: true, result } satisfies CapWorkerResponse, transfer);
+    ctx.postMessage({ id, kind: 'done', result } satisfies CapWorkerResponse, transfer);
   } catch (error) {
     ctx.postMessage({
       id,
-      ok: false,
+      kind: 'error',
       error: error instanceof Error ? error.message : String(error),
     } satisfies CapWorkerResponse);
   }

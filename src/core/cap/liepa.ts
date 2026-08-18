@@ -34,10 +34,24 @@ export function capLiepa(ctx: CapContext): CapPatch {
 
   const triNormal = (i: number, m: number, k: number): Vec3 => triangleNormalRaw(P[i], P[m], P[k]);
 
+  const edgeExists = ctx.edgeExists;
+  /** 테두리를 따라 이웃한 쌍인지. 그렇다면 대각선이 아니라 원래 있던 에지다. */
+  const isLoopEdge = (a: number, b: number) => b === a + 1 || (a === 0 && b === n - 1);
+
+  /**
+   * 이미 메시에 있는 두 정점을 대각선으로 다시 이으면 그 에지에 면이 하나 더 붙어
+   * 비다양체가 된다. 실제 이면각보다 큰 값을 씌워 사전식 비교에서 뒤로 밀되,
+   * 무한대를 쓰지는 않는다. 모든 대각선이 이미 존재하는 병적인 테두리에서도
+   * 삼각화 자체는 나와야 하기 때문이다.
+   */
+  const DUPLICATE_EDGE_PENALTY = Math.PI * 2;
+  const diagonalPenalty = (a: number, b: number): number =>
+    edgeExists && !isLoopEdge(a, b) && edgeExists(v[a], v[b]) ? DUPLICATE_EDGE_PENALTY : 0;
+
   /** 삼각형 (i, m, k) 하나를 추가할 때의 국소 비용. */
   const localWeight = (i: number, m: number, k: number): [number, number] => {
     const nrm = triNormal(i, m, k);
-    let angle = 0;
+    let angle = Math.max(diagonalPenalty(i, m), diagonalPenalty(m, k), diagonalPenalty(i, k));
 
     // 에지 (i, m) 건너편 이웃
     if (m === i + 1) {

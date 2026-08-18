@@ -105,7 +105,10 @@ export function Dropzone({
         </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-flaw/30 bg-flaw/8 px-4 py-3 text-[13px] text-flaw">
+          <div
+            role="alert"
+            className="mt-4 rounded-lg border border-flaw/30 bg-flaw/8 px-4 py-3 text-[13px] text-flaw"
+          >
             {error}
           </div>
         )}

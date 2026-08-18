@@ -28,6 +28,12 @@ export interface CapContext {
   adjacentNormals?: Vec3[];
   /** 바닥 받침을 만들 때 원래 최저점보다 얼마나 더 내릴지, bbox 대각선 대비 비율. */
   flatBaseOffsetRatio?: number;
+  /**
+   * 두 정점이 이미 메시에서 에지로 이어져 있는지 묻는다.
+   * 삼각화가 그런 쌍을 대각선으로 다시 만들면 그 에지에 면이 하나 더 붙어
+   * 비다양체가 되므로, 가능하면 피해서 자르기 위한 질의다.
+   */
+  edgeExists?: (a: number, b: number) => boolean;
 }
 
 export const EMPTY_PATCH: CapPatch = { newPositions: [], triangles: [] };

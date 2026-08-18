@@ -1,4 +1,5 @@
 import { computeBounds, type MeshData } from './types.ts';
+import { hash3, IntHashTable } from './intHash.ts';
 
 export interface WeldOptions {
   /** bbox 대각선 대비 병합 반경. 기본 1e-6은 float32 정밀도 한계에 맞춘 값이다. */
@@ -25,11 +26,6 @@ export interface WeldResult {
   remap: Int32Array;
 }
 
-/** 정수 셀 좌표를 32비트 해시로 섞는다. 충돌은 거리 검사로 걸러지므로 무방하다. */
-function cellHash(ix: number, iy: number, iz: number): number {
-  return (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(iz, 83492791)) | 0;
-}
-
 /**
  * 공간 해시 기반 정점 병합.
  *
@@ -50,8 +46,10 @@ export function weldVertices(mesh: MeshData, options: WeldOptions = {}): WeldRes
   const cell = Math.max(epsilon, 1e-12);
 
   const remap = new Int32Array(srcVertexCount).fill(-1);
-  const outPositions: number[] = [];
-  const buckets = new Map<number, number[]>();
+  // 병합 결과는 입력보다 커질 수 없으므로 상한만큼 미리 잡고 끝에서 잘라 쓴다.
+  const outPositions = new Float32Array(srcVertexCount * 3);
+  let outCount = 0;
+  const grid = new IntHashTable(srcVertexCount);
 
   // 좌표가 유한한 정점만 대상으로 삼는다. NaN은 셀 좌표 계산 자체를 깨뜨린다.
   const finite = new Uint8Array(srcVertexCount);
@@ -89,14 +87,16 @@ export function weldVertices(mesh: MeshData, options: WeldOptions = {}): WeldRes
     const iz = Math.floor(z / cell);
 
     // eps 거리 안의 짝은 인접 27개 셀 중 하나에 반드시 들어 있다.
+    // 해시가 충돌해 남의 셀 정점이 섞여 나와도 아래 거리 검사가 걸러 준다.
     let found = -1;
     outer: for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dz = -1; dz <= 1; dz++) {
-          const bucket = buckets.get(cellHash(ix + dx, iy + dy, iz + dz));
-          if (!bucket) continue;
-          for (let k = 0; k < bucket.length; k++) {
-            const cand = bucket[k];
+          for (
+            let cand = grid.first(hash3(ix + dx, iy + dy, iz + dz));
+            cand >= 0;
+            cand = grid.after(cand)
+          ) {
             const co = cand * 3;
             const ddx = outPositions[co] - x;
             const ddy = outPositions[co + 1] - y;
@@ -115,26 +115,28 @@ export function weldVertices(mesh: MeshData, options: WeldOptions = {}): WeldRes
       continue;
     }
 
-    const newIndex = outPositions.length / 3;
-    outPositions.push(x, y, z);
+    const newIndex = outCount++;
+    const no = newIndex * 3;
+    outPositions[no] = x;
+    outPositions[no + 1] = y;
+    outPositions[no + 2] = z;
     remap[v] = newIndex;
-
-    const key = cellHash(ix, iy, iz);
-    const bucket = buckets.get(key);
-    if (bucket) bucket.push(newIndex);
-    else buckets.set(key, [newIndex]);
+    grid.insert(hash3(ix, iy, iz), newIndex);
   }
 
-  const newVertexCount = outPositions.length / 3;
+  const newVertexCount = outCount;
   const mergedVertices = srcVertexCount - unreferencedVertices - newVertexCount;
 
-  const outIndices: number[] = [];
+  const triangleLimit = indices.length / 3;
+  const outIndices = new Uint32Array(indices.length);
+  let outTriangles = 0;
   let removedDegenerateTriangles = 0;
   let removedInvalidTriangles = 0;
   let removedDuplicateTriangles = 0;
 
-  // 동일한 정점 3개로 이루어진 완전 중복 삼각형을 걸러낸다.
-  const seenTriangles = new Set<string>();
+  // 정점 집합이 같은 완전 중복 삼각형을 걸러낸다. 문자열 키 Set을 쓰면
+  // 삼각형 수만큼 문자열이 생겨 큰 모델에서 수백 메가바이트를 잡아먹는다.
+  const triTable = new IntHashTable(triangleLimit);
 
   for (let t = 0; t < indices.length; t += 3) {
     const a = remap[indices[t]] ?? -1;
@@ -154,20 +156,39 @@ export function weldVertices(mesh: MeshData, options: WeldOptions = {}): WeldRes
     const s0 = Math.min(a, b, c);
     const s2 = Math.max(a, b, c);
     const s1 = a + b + c - s0 - s2;
-    const key = `${s0}_${s1}_${s2}`;
-    if (seenTriangles.has(key)) {
+
+    let duplicate = false;
+    for (let id = triTable.first(hash3(s0, s1, s2)); id >= 0; id = triTable.after(id)) {
+      const o = id * 3;
+      const ea = outIndices[o];
+      const eb = outIndices[o + 1];
+      const ec = outIndices[o + 2];
+      const t0 = Math.min(ea, eb, ec);
+      const t2 = Math.max(ea, eb, ec);
+      if (t0 === s0 && t2 === s2 && ea + eb + ec - t0 - t2 === s1) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) {
       removedDuplicateTriangles++;
       continue;
     }
-    seenTriangles.add(key);
 
-    outIndices.push(a, b, c);
+    const slot = outTriangles++;
+    const o = slot * 3;
+    outIndices[o] = a;
+    outIndices[o + 1] = b;
+    outIndices[o + 2] = c;
+    triTable.insert(hash3(s0, s1, s2), slot);
   }
 
   return {
     mesh: {
-      positions: new Float32Array(outPositions),
-      indices: new Uint32Array(outIndices),
+      // subarray가 아니라 복사본을 만든다. 뷰를 넘기면 상한만큼 잡아 둔 원본 버퍼가
+      // 통째로 살아남아, 정점이 대량으로 병합된 모델에서 오히려 메모리를 더 쓴다.
+      positions: outPositions.slice(0, newVertexCount * 3),
+      indices: outIndices.slice(0, outTriangles * 3),
     },
     epsilon,
     mergedVertices,

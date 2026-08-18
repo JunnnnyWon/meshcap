@@ -55,16 +55,17 @@ export function scorePrintability(report: ValidationReport): PrintabilityScore {
     }),
   );
 
-  const normalsOk = report.inconsistentEdgeCount === 0;
-  items.push({
-    id: 'normals',
-    label: '법선 방향',
-    max: 15,
-    earned: normalsOk ? 15 : Math.max(0, Math.round(15 * (1 - report.inconsistentEdgeCount / Math.max(1, report.edgeCount * 0.02)))),
-    detail: normalsOk
-      ? '모든 면이 같은 방향으로 정렬되어 있습니다'
-      : `방향이 어긋난 에지 ${fmt(report.inconsistentEdgeCount)}개`,
-  });
+  items.push(
+    gradeItem({
+      id: 'normals',
+      label: '법선 방향',
+      max: 15,
+      ok: report.inconsistentEdgeCount === 0,
+      ratio: report.inconsistentEdgeCount / Math.max(1, report.edgeCount * 0.02),
+      okDetail: '모든 면이 같은 방향으로 정렬되어 있습니다',
+      failDetail: `방향이 어긋난 에지 ${fmt(report.inconsistentEdgeCount)}개`,
+    }),
+  );
 
   const shells = report.connectedComponents;
   items.push({
@@ -83,7 +84,10 @@ export function scorePrintability(report: ValidationReport): PrintabilityScore {
     label: '삼각형 품질',
     max: 10,
     // 전체의 0.1%가 퇴화면 0점이 된다.
-    earned: Math.max(0, Math.round(10 * (1 - report.degenerateRatio / 0.001))),
+    earned:
+      report.degenerateTriangles === 0
+        ? 10
+        : Math.min(9, Math.max(0, Math.round(10 * (1 - report.degenerateRatio / 0.001)))),
     detail:
       report.degenerateTriangles === 0
         ? '면적이 0에 가까운 삼각형이 없습니다'
@@ -123,7 +127,11 @@ function gradeItem(input: {
   okDetail: string;
   failDetail: string;
 }): ScoreItem {
-  const earned = input.ok ? input.max : Math.max(0, Math.round(input.max * (1 - input.ratio)));
+  // 결함이 하나라도 있으면 만점을 주지 않는다. 비율이 미미해 반올림하면 만점이
+  // 나오는데, 그러면 "만점인데 결함 설명이 붙은" 모순된 항목이 화면에 뜬다.
+  const earned = input.ok
+    ? input.max
+    : Math.min(input.max - 1, Math.max(0, Math.round(input.max * (1 - input.ratio))));
   return {
     id: input.id,
     label: input.label,

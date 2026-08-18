@@ -1,4 +1,5 @@
 import type { MeshData } from './types.ts';
+import { estimateEdgeCount, hash2, IntHashTable } from './intHash.ts';
 
 export interface Topology {
   vertexCount: number;
@@ -8,10 +9,15 @@ export interface Topology {
   boundaryEdgeCount: number;
   /** 세 면 이상이 접한 에지. 슬라이서가 내부/외부를 판정하지 못한다. */
   nonManifoldEdgeCount: number;
+  /**
+   * 반대 방향 짝을 찾지 못하고 남은 half-edge의 총 개수.
+   * 표면이 실제로 열려 있는 정도를 나타내며, 이만큼이 테두리 순회의 대상이 된다.
+   */
+  unmatchedHalfEdgeCount: number;
   /** 두 면이 접했지만 같은 방향으로 순회해 법선이 어긋난 에지. */
   inconsistentEdgeCount: number;
   /**
-   * 경계 half-edge를 면이 사용한 방향 그대로 담는다.
+   * 짝을 찾지 못한 half-edge를 면이 사용한 방향 그대로 담는다.
    * 구멍을 메울 때는 이 방향의 역방향으로 삼각형을 감아야 법선이 맞는다.
    */
   boundaryFrom: Uint32Array;
@@ -57,23 +63,55 @@ class UnionFind {
   }
 }
 
+/** 접한 면 수는 3 이상이면 전부 같은 취급이라 8비트로 포화시켜도 판정이 달라지지 않는다. */
+const MAX_INCIDENT = 255;
+
+function growUint32(source: Uint32Array, size: number): Uint32Array<ArrayBuffer> {
+  const grown = new Uint32Array(size);
+  grown.set(source);
+  return grown;
+}
+
+function growUint8(source: Uint8Array, size: number): Uint8Array<ArrayBuffer> {
+  const grown = new Uint8Array(size);
+  grown.set(source);
+  return grown;
+}
+
 /**
  * 삼각형 목록에서 에지 인접 관계를 만들고 위상 결함을 집계한다.
  *
- * 무방향 에지 {u,v}를 u*V+v 정수 키로 해시한다. V가 3백만을 넘지 않는 한
- * 안전하게 double 정수 범위 안에 들어가므로 문자열 키보다 훨씬 빠르다.
+ * 자료구조를 전부 타입 배열로 잡은 것은 취향이 아니라 필요다. Map과 일반 배열로
+ * 같은 일을 하면 삼백만 삼각형짜리 모델에서 이 함수 하나가 1기가바이트 넘게 쓰고,
+ * 브라우저 워커가 그대로 죽는다. 에지 수의 상한은 삼각형마다 세 개이므로
+ * 미리 그만큼 잡아 두고 끝에서 실제 개수만 잘라 쓴다.
  */
 export function buildTopology(mesh: MeshData): Topology {
   const { positions, indices } = mesh;
   const V = positions.length / 3;
   const triangleCount = indices.length / 3;
+  const maxEdges = Math.max(1, indices.length);
+  // 오일러 공식으로 어림한 크기에서 시작하고, 모자라면 그때 늘린다.
+  // 상한인 3F로 잡아 두면 용접된 메시에서 필요량의 두 배를 물고 있게 된다.
+  let capacity = estimateEdgeCount(V, triangleCount);
 
-  const edgeMap = new Map<number, number>();
-  const edgeLo: number[] = [];
-  const edgeHi: number[] = [];
-  const forward: number[] = [];
-  const backward: number[] = [];
-  const firstFace: number[] = [];
+  let edgeLo = new Uint32Array(capacity);
+  let edgeHi = new Uint32Array(capacity);
+  let forward = new Uint8Array(capacity);
+  let backward = new Uint8Array(capacity);
+  let firstFace = new Uint32Array(capacity);
+  const table = new IntHashTable(capacity, capacity);
+  let edgeCount = 0;
+
+  const growEdgeStore = () => {
+    capacity = Math.min(maxEdges, Math.max(capacity + 1, Math.ceil(capacity * 1.6)));
+    edgeLo = growUint32(edgeLo, capacity);
+    edgeHi = growUint32(edgeHi, capacity);
+    forward = growUint8(forward, capacity);
+    backward = growUint8(backward, capacity);
+    firstFace = growUint32(firstFace, capacity);
+    table.growTo(capacity);
+  };
 
   const uf = new UnionFind(V);
   const used = new Uint8Array(V);
@@ -95,70 +133,100 @@ export function buildTopology(mesh: MeshData): Topology {
       const v = e === 0 ? b : e === 1 ? c : a;
       const lo = u < v ? u : v;
       const hi = u < v ? v : u;
-      const key = lo * V + hi;
+      const key = hash2(lo, hi);
 
-      let id = edgeMap.get(key);
-      if (id === undefined) {
-        id = edgeLo.length;
-        edgeMap.set(key, id);
-        edgeLo.push(lo);
-        edgeHi.push(hi);
-        forward.push(0);
-        backward.push(0);
-        firstFace.push(face);
+      let id = -1;
+      for (let cand = table.first(key); cand >= 0; cand = table.after(cand)) {
+        if (edgeLo[cand] === lo && edgeHi[cand] === hi) {
+          id = cand;
+          break;
+        }
       }
-      if (u === lo) forward[id]++;
-      else backward[id]++;
+
+      if (id < 0) {
+        if (edgeCount === capacity) growEdgeStore();
+        id = edgeCount++;
+        edgeLo[id] = lo;
+        edgeHi[id] = hi;
+        firstFace[id] = face;
+        table.insert(key, id);
+      }
+
+      if (u === lo) {
+        if (forward[id] < MAX_INCIDENT) forward[id]++;
+      } else if (backward[id] < MAX_INCIDENT) {
+        backward[id]++;
+      }
     }
   }
 
-  const edgeCount = edgeLo.length;
   let boundaryEdgeCount = 0;
   let nonManifoldEdgeCount = 0;
   let inconsistentEdgeCount = 0;
-
-  const bFrom: number[] = [];
-  const bTo: number[] = [];
-  const bFace: number[] = [];
+  let unmatchedHalfEdgeCount = 0;
 
   for (let id = 0; id < edgeCount; id++) {
-    const f = forward[id];
-    const b = backward[id];
-    const total = f + b;
+    const total = forward[id] + backward[id];
+    if (total === 1) boundaryEdgeCount++;
+    else if (total === 2) {
+      if (forward[id] === 2 || backward[id] === 2) inconsistentEdgeCount++;
+    } else if (total >= 3) nonManifoldEdgeCount++;
 
-    if (total === 1) {
-      boundaryEdgeCount++;
-      // 면이 실제로 순회한 방향을 그대로 보존한다.
-      if (f === 1) {
-        bFrom.push(edgeLo[id]);
-        bTo.push(edgeHi[id]);
-      } else {
-        bFrom.push(edgeHi[id]);
-        bTo.push(edgeLo[id]);
-      }
-      bFace.push(firstFace[id]);
-    } else if (total === 2) {
-      if (f === 2 || b === 2) inconsistentEdgeCount++;
-    } else if (total >= 3) {
-      nonManifoldEdgeCount++;
+    unmatchedHalfEdgeCount += Math.abs(forward[id] - backward[id]);
+  }
+
+  const boundaryFrom = new Uint32Array(unmatchedHalfEdgeCount);
+  const boundaryTo = new Uint32Array(unmatchedHalfEdgeCount);
+  const boundaryFace = new Uint32Array(unmatchedHalfEdgeCount);
+
+  /*
+   * 한 면만 접한 에지가 아니라 "짝을 찾지 못하고 남은 half-edge"를 내보낸다.
+   *
+   * 면 세 개가 한 에지를 공유하는 비다양체 지점에서는, 그 에지를 경계에서 빼 버리면
+   * 테두리를 따라가던 순회가 그 자리에서 갈 곳을 잃고 끊긴다. 실제 생성형 출력물에서
+   * 흔한 상황이고, 끊긴 테두리는 어디까지가 구멍인지 확정할 수 없어 메울 수 없다.
+   *
+   * 반대 방향끼리 짝을 지우는 연산은 모든 정점에서 진입 차수와 진출 차수를 똑같이
+   * 줄인다. 삼각형 하나가 각 정점에 진입 하나와 진출 하나를 주므로 원래 균형이 맞고,
+   * 따라서 남은 half-edge 집합도 균형이 맞는다. 균형 잡힌 유향 그래프는 반드시
+   * 서로소인 순환들로 분해되므로, 이렇게 모으면 순회가 끊기지 않는다.
+   */
+  let slot = 0;
+  for (let id = 0; id < edgeCount; id++) {
+    const surplus = forward[id] - backward[id];
+    if (surplus === 0) continue;
+
+    const from = surplus > 0 ? edgeLo[id] : edgeHi[id];
+    const to = surplus > 0 ? edgeHi[id] : edgeLo[id];
+    for (let k = Math.abs(surplus); k > 0; k--) {
+      boundaryFrom[slot] = from;
+      boundaryTo[slot] = to;
+      boundaryFace[slot] = firstFace[id];
+      slot++;
     }
   }
 
-  const outDegree = new Map<number, number>();
-  for (let i = 0; i < bFrom.length; i++) {
-    outDegree.set(bFrom[i], (outDegree.get(bFrom[i]) ?? 0) + 1);
-  }
   let nonManifoldVertexCount = 0;
-  for (const count of outDegree.values()) {
-    if (count > 1) nonManifoldVertexCount++;
+  if (unmatchedHalfEdgeCount > 0) {
+    const outDegree = new Uint8Array(V);
+    for (let i = 0; i < boundaryFrom.length; i++) {
+      const from = boundaryFrom[i];
+      if (outDegree[from] < MAX_INCIDENT) outDegree[from]++;
+      if (outDegree[from] === 2) nonManifoldVertexCount++;
+    }
   }
 
-  const roots = new Set<number>();
+  const isRoot = new Uint8Array(V);
   let usedVertexCount = 0;
+  let connectedComponents = 0;
   for (let v = 0; v < V; v++) {
     if (!used[v]) continue;
     usedVertexCount++;
-    roots.add(uf.find(v));
+    const root = uf.find(v);
+    if (!isRoot[root]) {
+      isRoot[root] = 1;
+      connectedComponents++;
+    }
   }
 
   return {
@@ -168,10 +236,11 @@ export function buildTopology(mesh: MeshData): Topology {
     boundaryEdgeCount,
     nonManifoldEdgeCount,
     inconsistentEdgeCount,
-    boundaryFrom: new Uint32Array(bFrom),
-    boundaryTo: new Uint32Array(bTo),
-    boundaryFace: new Uint32Array(bFace),
-    connectedComponents: roots.size,
+    unmatchedHalfEdgeCount,
+    boundaryFrom,
+    boundaryTo,
+    boundaryFace,
+    connectedComponents,
     nonManifoldVertexCount,
     eulerCharacteristic: usedVertexCount - edgeCount + triangleCount,
   };

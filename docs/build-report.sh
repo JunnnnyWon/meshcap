@@ -38,6 +38,9 @@ WORST_FULL=$(m syn-worst '.variants.meshcap.score')
 WORST_MS=$(m syn-worst '.variants.meshcap.elapsedMs')
 GENERATED=$(val '.generatedAt' | cut -c1-10)
 MODEL_COUNT=$(val '.models | length')
+# 정렬 전에는 뒤집힌 면의 둘레까지 테두리로 잡힌다. 실제로 메운 구멍 수와 대비한다.
+BUST_PRE_HOLES=$(m syn-bust '.variants.weldOnly.holes')
+BUST_REAL_HOLES=$(m syn-bust '[.strategyCounts[]] | add // 0')
 AVG_RAW=$(val '[.models[].variants.raw.score] | add / length | round')
 AVG_FULL=$(val '[.models[].variants.meshcap.score] | add / length | round')
 
@@ -90,8 +93,9 @@ officecli batch "$FILE" --commands "$(cat <<JSON
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"1.2 핵심 발견","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"첫째, 생성형 출력물에서 눈에 보이는 구멍의 상당수는 실제 구멍이 아닙니다. UV 이음매마다 정점이 쪼개져 있어 멀쩡히 붙은 자리가 경계로 잡힙니다. 대조군 가운데 실제로는 닫혀 있는 모델 하나는 용접 전 경계 에지가 ${SPLIT_RAW_EDGES}개로 집계되어 ${SPLIT_RAW}점이었지만, 좌표가 같은 정점을 합치는 것만으로 ${SPLIT_WELD}점이 되었습니다. 이 구간에서 메운 구멍은 하나도 없습니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"둘째, 처리 순서가 결과를 가릅니다. 감는 방향이 뒤집힌 면이 구멍 테두리에 닿아 있으면 그 지점에서 경계의 진행 방향이 반대로 뒤집혀, 하나였던 구멍이 여러 개의 열린 사슬로 쪼개집니다. 열린 사슬은 어디까지가 구멍인지 확정할 수 없어 메울 수 없습니다. 법선 정렬을 구멍 탐지 뒤에 두었을 때 ${BUST_NAIVE}점에서 멈추던 모델이, 앞으로 옮기자 ${BUST_FULL}점으로 완전히 밀폐되었습니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"셋째, 모든 구멍을 같은 방법으로 메우면 안 됩니다. 피규어 바닥의 큰 개구부를 중심점 부채꼴로 메우면 가운데가 원뿔처럼 솟아 서포트가 붙고, 반대로 표면의 작은 구멍을 평면으로 메우면 바깥으로 튀어나옵니다. 크기와 평면성, 방향을 먼저 재고 전략을 나누는 것이 이 도구의 핵심 기여입니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"둘째, 구멍의 테두리를 무엇으로 정의하느냐가 실제 모델에서 성패를 가릅니다. 흔히 쓰는 정의인 \u0027한 면만 접한 에지\u0027로는 면 셋이 한 에지를 공유하는 비다양체 지점에서 순회가 끊깁니다. 실제 Meshy 출력물 하나에서 비다양체 에지 93개 때문에 경계 정점 178개 중 117개의 차수가 어긋났고, 테두리가 전부 끊긴 사슬로 잡혀 한 곳도 메울 수 없었습니다. 기준을 \u0027반대 방향 짝을 찾지 못한 half-edge\u0027로 바꾸자 같은 모델의 테두리 59개가 모두 닫혔습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"셋째, 처리 순서가 결과를 가릅니다. 감는 방향이 뒤집힌 면은 자기 에지 세 개의 방향 짝을 깨뜨리므로, 멀쩡히 막혀 있는 자리에 짝 없는 half-edge를 남깁니다. 탐지기 눈에는 구멍으로 보이고, 그대로 메우면 막힌 표면 위에 없는 면이 덧붙습니다. 대조군에서 정렬 전에는 테두리가 ${BUST_PRE_HOLES}개로 잡히지만 방향을 맞추고 나면 실제 구멍은 ${BUST_REAL_HOLES}개뿐이었습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"넷째, 모든 구멍을 같은 방법으로 메우면 안 됩니다. 피규어 바닥의 큰 개구부를 중심점 부채꼴로 메우면 가운데가 원뿔처럼 솟아 서포트가 붙고, 반대로 표면의 작은 구멍을 평면으로 메우면 바깥으로 튀어나옵니다. 크기와 평면성, 방향을 먼저 재고 전략을 나누는 것이 이 도구의 핵심 기여입니다.","size":"11pt","spaceAfter":"8pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"1.3 결과","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"결함 유형을 단계별로 심은 대조군 ${MODEL_COUNT}종에서, 무처리 상태의 출력 적합성 점수는 평균 ${AVG_RAW}점이었고 MeshCap 처리 후 평균 ${AVG_FULL}점이 되었습니다. 가장 결함이 심한 모델은 구멍 ${WORST_HOLES}개를 모두 닫고 ${WORST_FULL}점에 도달했으며, 전체 처리에 ${WORST_MS}밀리초가 걸렸습니다.","size":"11pt","spaceAfter":"8pt"}}
@@ -224,13 +228,19 @@ officecli batch "$FILE" --commands "$(cat <<JSON
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.2 위상 구조","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"삼각형 목록에서 에지별 인접 관계를 만듭니다. 무방향 에지를 정점 인덱스 두 개로 이루어진 정수 키로 해시하고, 각 에지를 지나간 면의 수와 방향을 셉니다. 한 면만 지난 에지는 경계이고, 두 면이 지났는데 방향이 같으면 둘 중 하나가 뒤집힌 것이며, 세 면 이상이 지났으면 비다양체입니다. 여기서 연결 요소 수와 오일러 지표도 함께 구합니다. 닫힌 구 위상이면 오일러 지표가 2이므로, 보정 후 이 값이 2인지 보는 것이 밀폐 여부를 교차 검증하는 손쉬운 방법이 됩니다.","size":"11pt","spaceAfter":"8pt"}},
 
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.3 법선 정렬이 먼저여야 하는 이유","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"이 순서는 처음에 반대로 두었다가 바로잡은 부분이고, 본 연구에서 가장 실용적인 발견입니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"테두리를 복원할 때는 경계 에지를 방향에 따라 이어 붙입니다. 정상적인 표면에서는 모든 경계 정점에서 들어오는 경계 에지와 나가는 경계 에지가 하나씩 짝을 이루므로 추적이 반드시 시작점으로 돌아옵니다. 그런데 감는 방향이 뒤집힌 면이 테두리에 닿아 있으면 그 자리에서 진행 방향이 반대가 되어 짝이 깨집니다. 추적은 갈 곳을 잃고 멈추며, 남은 조각들은 각각 별개의 열린 사슬로 잡힙니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"열린 사슬은 시작과 끝이 만나지 않으므로 어디까지가 구멍인지 확정할 수 없고, 임의로 이어 붙이면 엉뚱한 면이 생깁니다. 따라서 메우지 않고 건너뛰게 되며 결과적으로 구멍이 그대로 남습니다. 뒤집힌 면을 섞어 둔 대조군에서 정렬을 나중에 하면 ${BUST_NAIVE}점에서 멈추지만, 앞으로 옮기면 같은 모델이 ${BUST_FULL}점으로 완전히 밀폐됩니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"다만 방향 통일과 바깥 방향 맞추기는 다른 일입니다. 이웃 면끼리 방향을 맞추는 전파는 열린 메시에서도 되지만, 껍질이 안팎 중 어디를 향하는지는 부호 있는 부피로 판정하므로 닫힌 뒤에야 의미가 있습니다. 그래서 전파는 구멍 탐지 앞에, 바깥 방향 판정은 구멍을 다 메운 뒤에 둡니다. 이 절제 실험은 저장소의 테스트로 고정해 두어 순서를 되돌리면 테스트가 실패합니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.3 테두리를 무엇으로 정의할 것인가","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"구멍의 테두리는 한 면만 접한 에지를 모아 이으면 된다고 보는 것이 보통입니다. 합성 대조군에서는 이 정의로 충분했지만, 실제 서비스 출력물에 적용하자 곧바로 무너졌습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"문제는 면 셋이 한 에지를 공유하는 비다양체 지점입니다. 그런 에지는 접한 면이 셋이므로 어느 정의로도 경계가 아니지만, 테두리를 따라가던 순회는 바로 그 자리에서 다음으로 갈 에지를 찾지 못합니다. 삼백만 삼각형짜리 Meshy 출력물에서 비다양체 에지 93개 때문에 경계 정점 178개 중 117개의 진입 차수와 진출 차수가 어긋났고, 테두리 전부가 끊긴 사슬로 잡혀 한 곳도 메울 수 없었습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"기준을 바꿔 반대 방향 짝을 찾지 못하고 남은 half-edge를 모으면 이 문제가 정의상 사라집니다. 삼각형 하나는 세 방향 에지가 순환을 이루므로 각 정점에 진입 하나와 진출 하나를 줍니다. 따라서 전체 half-edge 집합은 모든 정점에서 차수가 균형을 이룹니다. 어떤 에지에서 반대 방향끼리 짝을 지우면 양 끝 정점의 진입과 진출이 똑같은 수만큼 줄어들므로 균형이 그대로 유지됩니다. 균형 잡힌 유향 그래프는 반드시 서로소인 순환들로 분해되므로, 남은 half-edge를 모으면 순회가 어디서도 끊기지 않습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"같은 Meshy 모델의 테두리 59개가 이 기준에서는 모두 닫혔고 경계 에지 120개가 0개가 되었습니다. 대신 비다양체 에지가 93개에서 95개로 늘었습니다. 면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙기 때문입니다. 표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈이고, 채점에서 두 항목을 따로 둔 이유이기도 합니다.","size":"11pt","spaceAfter":"8pt"}},
 
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.4 구멍 분류","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.4 법선 정렬이 먼저여야 하는 이유","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"테두리를 짝 없는 half-edge로 정의하고 나면 감는 방향이 곧바로 문제가 됩니다. 뒤집힌 면은 자기 에지 세 개에서 방향 짝을 깨뜨립니다. 그 자리는 멀쩡히 막혀 있는데도 짝을 찾지 못한 half-edge가 남으므로 탐지기 눈에는 구멍으로 보입니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"그대로 메우면 없는 구멍을 막게 됩니다. 실제로는 막혀 있는 표면 위에 면이 한 겹 더 덧붙어 부피가 달라지고 비다양체 에지가 늘어납니다. 구멍을 못 메우고 남기는 것보다 나쁩니다. 뒤집힌 면을 섞어 둔 대조군에서 정렬 전에는 테두리가 ${BUST_PRE_HOLES}개로 잡히지만, 방향을 맞추고 나면 실제 구멍은 ${BUST_REAL_HOLES}개뿐입니다. 나머지는 전부 허상이고 점수도 ${BUST_NAIVE}점과 ${BUST_FULL}점으로 갈립니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"다만 방향 통일과 바깥 방향 맞추기는 다른 일입니다. 이웃 면끼리 방향을 맞추는 전파는 열린 메시에서도 되지만, 껍질이 안팎 중 어디를 향하는지는 부호 있는 부피로 판정하므로 닫힌 뒤에야 의미가 있습니다. 그래서 전파는 구멍 탐지 앞에, 바깥 방향 판정은 구멍을 다 메운 뒤에 둡니다. 이 절제 실험은 저장소의 테스트로 고정해 두어 순서를 되돌리면 테스트가 실패합니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"뚜껑을 붙이는 것도 한 번으로 끝나지 않습니다. 새로 만든 면의 테두리가 기존 표면과 완전히 맞물리지 않으면 그 자리에 다시 작은 틈이 남고, 비다양체 지점 근처에서 특히 자주 생깁니다. 삼백만 삼각형짜리 모델에서는 두 번째 회차까지 돌아야 경계 에지가 0이 되었습니다. 그래서 남은 틈이 없어지거나 더 줄지 않을 때까지 반복합니다.","size":"11pt","spaceAfter":"8pt"}},
+
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.5 구멍 분류","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"테두리마다 네 가지를 잽니다. 둘레, 최적 평면에 투영한 넓이, 평면에서 벗어난 정도, 그리고 메운 면이 향하게 될 방향입니다. 최적 평면은 Newell 방법으로 구합니다. 세 점만 쓰는 방식과 달리 평면에서 벗어난 다각형에서도 안정적이고, 결과 벡터의 길이가 투영 넓이의 두 배라 넓이를 따로 계산할 필요가 없습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"평면성은 테두리 정점이 최적 평면에서 벗어난 제곱평균 거리를, 둘레가 같은 원의 반지름으로 나눈 값입니다. 길이 차원이 상쇄되어 무차원이 되므로 모델의 크기나 단위와 무관하게 같은 임계값을 쓸 수 있습니다.","size":"11pt","spaceAfter":"10pt"}}
 ]
@@ -263,14 +273,14 @@ officecli add "$FILE" /body --type paragraph --prop text="표 3. 구멍 분류 �
 
 officecli batch "$FILE" --commands "$(cat <<'JSON'
 [
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.5 네 가지 메우기 전략","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.6 네 가지 메우기 전략","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"부채꼴은 테두리 중심에 정점 하나를 두고 방사형으로 잇습니다. 가장 빠르지만 구멍이 커지면 중심점이 표면에서 멀어져 원뿔처럼 솟으므로 작은 구멍에만 씁니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"평면 투영은 최적 평면에 테두리를 투영해 이어 자르기 방식으로 삼각화합니다. 새 정점을 만들지 않아 표면 밖으로 솟지 않고, 오목한 다각형도 볼록 분해 없이 올바르게 채웁니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"Liepa 방식은 이웃 면과 이루는 최대 이면각을 먼저 최소화하고 같으면 넓이가 작은 쪽을 고르는 동적계획법입니다. 평면에서 크게 벗어난 테두리에서 주변 곡률을 이어받아 자연스러운 뚜껑을 만듭니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"바닥 받침은 이 연구가 3D 프린팅이라는 목적을 위해 따로 둔 전략입니다. 테두리를 같은 높이의 평면까지 수직으로 내려 옆벽을 만들고 그 평면 링을 채웁니다. 기존 정점은 하나도 움직이지 않으므로 실루엣이 그대로 유지됩니다. 평면은 테두리 최저점보다 한 층 두께만큼 더 아래에 둡니다. 같은 높이에 두면 최저점 자리의 옆벽 삼각형이 넓이 0이 되어 오히려 새 결함이 생기기 때문입니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"어떤 전략이든 삼각형을 하나도 내놓지 못하면 부채꼴로 넘어갑니다. 자기교차하는 테두리처럼 병적인 입력에서 품질을 조금 포기하더라도 구멍이 남는 것보다는 낫기 때문입니다.","size":"11pt","spaceAfter":"8pt"}},
 
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.6 검증과 채점","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.7 검증과 채점","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"배점은 슬라이서가 실제로 실패하는 순서를 따랐습니다. 경계 에지가 남으면 아예 슬라이싱이 되지 않으므로 가장 무겁고, 뒤로 갈수록 출력은 되지만 품질이 떨어지는 항목입니다.","size":"11pt","spaceAfter":"10pt"}}
 ]
 JSON
@@ -405,7 +415,43 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"6.5 Meshy와 Tripo 실측","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 서비스의 실제 출력물 비교는 동일한 콘셉트 세 종을 양쪽에서 생성해 같은 네 단계로 측정하는 방식으로 진행합니다. 콘셉트는 난이도를 나누어 정합니다. 하나는 로봇이나 헬멧처럼 표면이 단순한 무기물, 하나는 의복이 있는 인간형, 하나는 머리카락과 얇은 장신구가 있는 캐릭터입니다. 얇고 복잡한 구조일수록 생성 단계에서 면이 누락되기 쉬우므로 두 서비스의 차이가 드러나는 지점이기도 합니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"측정은 웹 벤치마크 페이지의 측정 패널에서 수행합니다. node 스크립트 대신 브라우저를 쓰는 이유는 두 가지입니다. 서비스가 내려주는 GLB는 Draco로 압축되어 있고 텍스처가 포함되어 있어 서버 환경에서 로더를 그대로 쓰기 어렵고, 무엇보다 사용자가 화면에서 보는 것과 동일한 경로로 측정해야 리포트의 숫자와 도구의 숫자가 어긋나지 않기 때문입니다. 측정 결과는 JSON으로 내려받아 저장소에 반영하면 벤치마크 페이지에 그대로 나타납니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"본 리포트 작성 시점에는 합성 대조군 측정까지 완료했으며, 두 서비스의 실측 데이터는 2026년 8월 20일 생성분으로 채웁니다.","size":"11pt","spaceAfter":"8pt"}}
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"콘셉트 세 종의 체계적인 비교는 2026년 8월 20일 생성분으로 채웁니다. 다만 알고리즘 검증을 위해 두 서비스의 출력물을 각각 한 점씩 미리 받아 돌려 보았고, 그 결과가 아래입니다. 합성 대조군에서는 드러나지 않던 문제가 여기서 나왔기 때문에 5.3절의 설계 변경으로 이어졌습니다.","size":"11pt","spaceAfter":"10pt"}}
+]
+JSON
+)"
+
+officecli add "$FILE" /body --type table --prop rows=8 --prop cols=3 --prop width=100%
+TBL=6
+officecli set "$FILE" "/body/tbl[$TBL]/tr[1]" --prop header=true --prop c1="지표" --prop c2="Meshy 출력물" --prop c3="Tripo 출력물"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[2]" --prop c1="파일 크기" --prop c2="147 MB" --prop c3="90 MB"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[3]" --prop c1="삼각형" --prop c2="3,092,042" --prop c3="1,896,054"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[4]" --prop c1="용접으로 병합된 정점" --prop c2="7,731,317 (83%)" --prop c3="4,740,187 (83%)"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[5]" --prop c1="경계 에지 (보정 전 → 후)" --prop c2="120 → 0" --prop c3="14 → 0"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[6]" --prop c1="비다양체 에지 (보정 전 → 후)" --prop c2="93 → 95" --prop c3="9 → 90"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[7]" --prop c1="출력 적합성 점수" --prop c2="94 → 96" --prop c3="97 → 99"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[8]" --prop c1="브라우저 처리 시간" --prop c2="약 7초" --prop c3="약 4초"
+
+for col in 1 2 3; do
+  officecli set "$FILE" "/body/tbl[$TBL]/tr[1]/tc[$col]" --prop fill=1F3A5F
+  officecli set "$FILE" "/body/tbl[$TBL]/tr[1]/tc[$col]/p[1]/r[1]" --prop bold=true --prop color=FFFFFF --prop size=10.5pt
+done
+for row in $(seq 2 8); do
+  officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[1]/p[1]/r[1]" --prop size=10.5pt
+  for col in 2 3; do
+    officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[$col]/p[1]" --prop align=right
+    officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[$col]/p[1]/r[1]" --prop size=10.5pt
+  done
+done
+for row in 3 5 7; do for col in 1 2 3; do
+  officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[$col]" --prop fill=EEF2F7
+done; done
+
+officecli add "$FILE" /body --type paragraph --prop text="표 6. 실제 서비스 출력물 예비 측정 결과" --prop size=9.5pt --prop italic=true --prop color=7C8593 --prop align=center --prop spaceBefore=6pt --prop spaceAfter=14pt
+
+officecli batch "$FILE" --commands "$(cat <<'JSON'
+[
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 모델 모두 완전 밀폐에 도달했지만, 비다양체 에지가 늘어난 폭이 크게 다릅니다. Tripo 출력물에서는 정점 42개짜리 테두리 두 개가 같은 자리에 겹쳐 잡혔는데, 표면이 이중으로 겹쳐 있는 지점이라 뚜껑도 두 겹으로 생겼습니다. 입력 자체의 병리이며 현재는 감지해 점수에 반영할 뿐 자동으로 정리하지는 않습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 파일 모두 브라우저에서 처리했고 워커가 중단되지 않았습니다. 다만 삼백만 삼각형 규모에서는 최대 메모리가 1.4기가바이트에 이르므로, 저사양 기기에서는 모델을 단순화한 뒤 사용하는 편이 안전합니다.","size":"11pt","spaceAfter":"8pt"}}
 ]
 JSON
 )"
@@ -426,7 +472,7 @@ JSON
 )"
 
 officecli add "$FILE" /body --type table --prop rows=7 --prop cols=4 --prop width=100%
-TBL=6
+TBL=7
 officecli set "$FILE" "/body/tbl[$TBL]/tr[1]" --prop header=true --prop c1="측정 항목" --prop c2="보정 전 예상" --prop c3="보정 후 예상" --prop c4="실측"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[2]" --prop c1="슬라이서 로드" --prop c2="경고 발생 또는 자동 수리 개입" --prop c3="경고 없음" --prop c4="측정 예정"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[3]" --prop c1="내부 채움" --prop c2="안팎 판정 실패로 속이 빔" --prop c3="설정한 채움률대로 채워짐" --prop c4="측정 예정"
@@ -446,7 +492,7 @@ for row in 3 5 7; do for col in 1 2 3 4; do
   officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[$col]" --prop fill=EEF2F7
 done; done
 
-officecli add "$FILE" /body --type paragraph --prop text="표 6. 슬라이서 분석 항목과 예상되는 차이. 실측 열은 2026년 8월 21일 출력 테스트에서 채운다." --prop size=9.5pt --prop italic=true --prop color=7C8593 --prop align=center --prop spaceBefore=6pt --prop spaceAfter=14pt
+officecli add "$FILE" /body --type paragraph --prop text="표 7. 슬라이서 분석 항목과 예상되는 차이. 실측 열은 2026년 8월 21일 출력 테스트에서 채운다." --prop size=9.5pt --prop italic=true --prop color=7C8593 --prop align=center --prop spaceBefore=6pt --prop spaceAfter=14pt
 
 officecli batch "$FILE" --commands "$(cat <<'JSON'
 [
@@ -464,7 +510,10 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"8. 한계 및 향후 과제","style":"Heading1","size":"20pt","bold":"true","pageBreakBefore":"true","spaceAfter":"12pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"8.1 알려진 한계","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"테두리가 한 정점에서 여러 갈래로 갈라지는 나비넥타이 형태에서는 어느 갈래를 먼저 따라가느냐에 따라 구멍이 나뉘는 모양이 달라집니다. 전체를 빠짐없이 덮는다는 점은 유지되지만 분할 결과가 유일하지 않습니다. 갈래를 고를 때 정점 주변의 기하를 참고하면 개선할 수 있습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"테두리가 한 정점에서 여러 갈래로 갈라지면 어느 갈래를 먼저 따라가느냐에 따라 구멍이 나뉘는 모양이 달라집니다. 순회가 반드시 닫히고 전체를 빠짐없이 덮는다는 점은 보장되지만 분할 결과가 유일하지는 않습니다. 갈래를 고를 때 정점 주변의 기하를 참고하면 개선할 수 있습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙어 비다양체가 더 심해집니다. 표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈입니다. 슬라이서 대부분이 비다양체보다 열린 경계에서 먼저 실패하므로 이 교환은 의도한 것이지만, 근본적으로는 비다양체 지점을 먼저 분리해 다양체로 만든 뒤 메우는 편이 낫습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"겹쳐 있는 이중 표면은 같은 자리에 테두리가 두 벌 잡히고 뚜껑도 두 겹으로 생깁니다. 실제 Tripo 출력물에서 정점 42개짜리 테두리가 같은 위치에 두 개 잡히는 사례를 확인했습니다. 입력 자체의 병리라 현재는 감지해 점수에만 반영합니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"삼백만 삼각형 규모에서는 처리에 약 7초, 최대 메모리 1.4기가바이트가 필요합니다. 자료구조를 전부 타입 배열로 다시 쓰면서 초기 구현 대비 시간은 3분의 1, 메모리는 3분의 2로 줄였지만, 저사양 기기에서는 여전히 부담입니다. 모델을 단순화하는 단계를 도구 안에 넣는 것이 다음 과제입니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"바닥 받침은 테두리를 수직으로 내리는 방식이라, 투영된 테두리가 스스로 겹치는 심하게 오목한 개구부에서는 옆벽이 서로 교차할 수 있습니다. 현재는 관통 검사로 이를 감지해 점수에 반영할 뿐 자동으로 해소하지는 않습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"벽 두께는 검사하지 않습니다. 밀폐된 메시라도 벽이 노즐 지름보다 얇으면 FDM에서 출력되지 않습니다. 이 판정에는 내부 거리장 계산이 필요해 현재 범위 밖에 두었고 슬라이서에 맡깁니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"Liepa 삼각화는 정점 250개를 넘는 테두리에서 평면 투영으로 넘어갑니다. 세제곱 시간이라 그 이상에서는 브라우저가 눈에 띄게 멈추기 때문입니다. 테두리를 미리 단순화한 뒤 삼각화하고 다시 세분하는 방식으로 상한을 올릴 수 있습니다.","size":"11pt","spaceAfter":"8pt"}},
@@ -481,7 +530,7 @@ JSON
 )"
 
 officecli add "$FILE" /body --type table --prop rows=6 --prop cols=2 --prop width=100%
-TBL=7
+TBL=8
 officecli set "$FILE" "/body/tbl[$TBL]/tr[1]" --prop header=true --prop c1="도구" --prop c2="활용 방식"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[2]" --prop c1="Tripo3D" --prop c2="비교 대상 3D 모델 생성 및 출력 특성 관찰"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[3]" --prop c1="Meshy AI" --prop c2="비교 대상 3D 모델 생성 및 출력 특성 관찰"
@@ -500,7 +549,7 @@ for row in 3 5; do for col in 1 2; do
   officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[$col]" --prop fill=EEF2F7
 done; done
 
-officecli add "$FILE" /body --type paragraph --prop text="표 7. AI 도구 활용 내역" --prop size=9.5pt --prop italic=true --prop color=7C8593 --prop align=center --prop spaceBefore=6pt --prop spaceAfter=14pt
+officecli add "$FILE" /body --type paragraph --prop text="표 8. AI 도구 활용 내역" --prop size=9.5pt --prop italic=true --prop color=7C8593 --prop align=center --prop spaceBefore=6pt --prop spaceAfter=14pt
 
 officecli batch "$FILE" --commands "$(cat <<'JSON'
 [
@@ -527,7 +576,7 @@ JSON
 )"
 
 officecli add "$FILE" /body --type table --prop rows=5 --prop cols=2 --prop width=100%
-TBL=8
+TBL=9
 officecli set "$FILE" "/body/tbl[$TBL]/tr[1]" --prop header=true --prop c1="명령" --prop c2="하는 일"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[2]" --prop c1="npm install" --prop c2="의존성 설치"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[3]" --prop c1="npm test" --prop c2="코어 알고리즘 단위 테스트 43개 실행"
@@ -546,7 +595,7 @@ for row in 3 5; do for col in 1 2; do
   officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[$col]" --prop fill=EEF2F7
 done; done
 
-officecli add "$FILE" /body --type paragraph --prop text="표 8. 재현 명령" --prop size=9.5pt --prop italic=true --prop color=7C8593 --prop align=center --prop spaceBefore=6pt --prop spaceAfter=14pt
+officecli add "$FILE" /body --type paragraph --prop text="표 9. 재현 명령" --prop size=9.5pt --prop italic=true --prop color=7C8593 --prop align=center --prop spaceBefore=6pt --prop spaceAfter=14pt
 
 officecli batch "$FILE" --commands "$(cat <<'JSON'
 [

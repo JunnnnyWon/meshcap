@@ -1,4 +1,5 @@
 import type { MeshData } from './types.ts';
+import { estimateEdgeCount, hash2, IntHashTable } from './intHash.ts';
 
 export interface OrientOptions {
   /**
@@ -44,7 +45,6 @@ function rawHasDirected(indices: Uint32Array, f: number, u: number, v: number): 
 export function orientOutward(mesh: MeshData, options: OrientOptions = {}): OrientResult {
   const alignOutward = options.alignOutward ?? true;
   const { positions, indices } = mesh;
-  const V = positions.length / 3;
   const F = indices.length / 3;
 
   if (F === 0) {
@@ -52,11 +52,34 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
   }
 
   // 무방향 에지마다 접한 면을 최대 두 개까지 기록한다.
-  const edgeMap = new Map<number, number>();
-  const faceA: number[] = [];
-  const faceB: number[] = [];
-  const edgeLo: number[] = [];
-  const edgeHi: number[] = [];
+  // 타입 배열로 잡는 이유는 halfEdge.ts와 같다. Map과 일반 배열로는 수백만 삼각형에서
+  // 이 함수 하나가 기가바이트를 쓴다.
+  const maxEdges = Math.max(1, indices.length);
+  let capacity = estimateEdgeCount(positions.length / 3, F);
+  let faceA = new Int32Array(capacity);
+  let faceB = new Int32Array(capacity).fill(-1);
+  let edgeLo = new Uint32Array(capacity);
+  let edgeHi = new Uint32Array(capacity);
+  const table = new IntHashTable(capacity, capacity);
+  let edgeCount = 0;
+
+  const growEdgeStore = () => {
+    const grown = Math.min(maxEdges, Math.max(capacity + 1, Math.ceil(capacity * 1.6)));
+    const nextFaceA = new Int32Array(grown);
+    nextFaceA.set(faceA);
+    const nextFaceB = new Int32Array(grown).fill(-1);
+    nextFaceB.set(faceB);
+    const nextLo = new Uint32Array(grown);
+    nextLo.set(edgeLo);
+    const nextHi = new Uint32Array(grown);
+    nextHi.set(edgeHi);
+    faceA = nextFaceA;
+    faceB = nextFaceB;
+    edgeLo = nextLo;
+    edgeHi = nextHi;
+    capacity = grown;
+    table.growTo(grown);
+  };
 
   for (let f = 0; f < F; f++) {
     const o = f * 3;
@@ -65,16 +88,23 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
       const v = indices[o + ((e + 1) % 3)];
       const lo = u < v ? u : v;
       const hi = u < v ? v : u;
-      const key = lo * V + hi;
+      const key = hash2(lo, hi);
 
-      let id = edgeMap.get(key);
-      if (id === undefined) {
-        id = faceA.length;
-        edgeMap.set(key, id);
-        faceA.push(f);
-        faceB.push(-1);
-        edgeLo.push(lo);
-        edgeHi.push(hi);
+      let id = -1;
+      for (let cand = table.first(key); cand >= 0; cand = table.after(cand)) {
+        if (edgeLo[cand] === lo && edgeHi[cand] === hi) {
+          id = cand;
+          break;
+        }
+      }
+
+      if (id < 0) {
+        if (edgeCount === capacity) growEdgeStore();
+        id = edgeCount++;
+        edgeLo[id] = lo;
+        edgeHi[id] = hi;
+        faceA[id] = f;
+        table.insert(key, id);
       } else if (faceB[id] === -1 && faceA[id] !== f) {
         faceB[id] = f;
       }
@@ -83,7 +113,7 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
 
   // 면 인접 리스트를 CSR 형태로 만든다.
   const degree = new Int32Array(F);
-  for (let id = 0; id < faceA.length; id++) {
+  for (let id = 0; id < edgeCount; id++) {
     if (faceB[id] === -1) continue;
     degree[faceA[id]]++;
     degree[faceB[id]]++;
@@ -94,7 +124,7 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
   const neighborFace = new Int32Array(start[F]);
   const neighborEdge = new Int32Array(start[F]);
 
-  for (let id = 0; id < faceA.length; id++) {
+  for (let id = 0; id < edgeCount; id++) {
     const a = faceA[id];
     const b = faceB[id];
     if (b === -1) continue;
