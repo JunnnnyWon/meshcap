@@ -106,11 +106,25 @@ export function flippedTetrahedron(): MeshData {
   return { positions: t.positions, indices };
 }
 
+/** 바닥면이 빠진 정사면체. 정점 3개짜리 구멍 하나가 생긴다. */
+export function openTetrahedron(): MeshData {
+  const t = tetrahedron();
+  return mesh([...t.positions], [...t.indices].slice(0, 9));
+}
+
 /**
- * 옆면이 열린 원기둥. 위아래에 큰 평면 구멍이 하나씩 생긴다.
- * 피규어 바닥의 개구부를 흉내 내는 데 쓴다.
+ * 옆면만 있는 원기둥. 위아래에 큰 평면 구멍이 하나씩 생긴다.
+ * 법선은 바깥을 향하고, 위 축은 Y다. 피규어 바닥의 개구부를 흉내 내는 데 쓴다.
+ *
+ * topWave를 주면 윗 테두리가 물결치며 평면에서 벗어난다.
  */
-export function openCylinder(segments = 24, radius = 1, height = 2): MeshData {
+export function openCylinder(
+  segments = 24,
+  radius = 1,
+  height = 2,
+  topWave = 0,
+  waveCount = 3,
+): MeshData {
   const positions: number[] = [];
   const indices: number[] = [];
 
@@ -119,7 +133,7 @@ export function openCylinder(segments = 24, radius = 1, height = 2): MeshData {
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     positions.push(x, 0, z);
-    positions.push(x, height, z);
+    positions.push(x, height + Math.sin(angle * waveCount) * topWave, z);
   }
 
   for (let s = 0; s < segments; s++) {
@@ -128,8 +142,8 @@ export function openCylinder(segments = 24, radius = 1, height = 2): MeshData {
     const t0 = s * 2 + 1;
     const b1 = next * 2;
     const t1 = next * 2 + 1;
-    indices.push(b0, b1, t1);
-    indices.push(b0, t1, t0);
+    indices.push(b0, t1, b1);
+    indices.push(b0, t0, t1);
   }
 
   return mesh(positions, indices);

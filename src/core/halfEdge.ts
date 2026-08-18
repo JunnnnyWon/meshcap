@@ -16,6 +16,11 @@ export interface Topology {
    */
   boundaryFrom: Uint32Array;
   boundaryTo: Uint32Array;
+  /**
+   * 각 경계 half-edge에 접한 유일한 삼각형의 인덱스.
+   * Liepa 삼각화가 이웃 면과의 이면각을 계산할 때 필요하다.
+   */
+  boundaryFace: Uint32Array;
   /** 정점 기준 연결 요소 수. 2 이상이면 떠 있는 조각이 있다는 뜻이다. */
   connectedComponents: number;
   /** 경계 half-edge가 두 개 이상 나가는 정점. 나비넥타이(bowtie) 형태다. */
@@ -68,11 +73,13 @@ export function buildTopology(mesh: MeshData): Topology {
   const edgeHi: number[] = [];
   const forward: number[] = [];
   const backward: number[] = [];
+  const firstFace: number[] = [];
 
   const uf = new UnionFind(V);
   const used = new Uint8Array(V);
 
   for (let t = 0; t < indices.length; t += 3) {
+    const face = t / 3;
     const a = indices[t];
     const b = indices[t + 1];
     const c = indices[t + 2];
@@ -98,6 +105,7 @@ export function buildTopology(mesh: MeshData): Topology {
         edgeHi.push(hi);
         forward.push(0);
         backward.push(0);
+        firstFace.push(face);
       }
       if (u === lo) forward[id]++;
       else backward[id]++;
@@ -111,6 +119,7 @@ export function buildTopology(mesh: MeshData): Topology {
 
   const bFrom: number[] = [];
   const bTo: number[] = [];
+  const bFace: number[] = [];
 
   for (let id = 0; id < edgeCount; id++) {
     const f = forward[id];
@@ -127,6 +136,7 @@ export function buildTopology(mesh: MeshData): Topology {
         bFrom.push(edgeHi[id]);
         bTo.push(edgeLo[id]);
       }
+      bFace.push(firstFace[id]);
     } else if (total === 2) {
       if (f === 2 || b === 2) inconsistentEdgeCount++;
     } else if (total >= 3) {
@@ -160,6 +170,7 @@ export function buildTopology(mesh: MeshData): Topology {
     inconsistentEdgeCount,
     boundaryFrom: new Uint32Array(bFrom),
     boundaryTo: new Uint32Array(bTo),
+    boundaryFace: new Uint32Array(bFace),
     connectedComponents: roots.size,
     nonManifoldVertexCount,
     eulerCharacteristic: usedVertexCount - edgeCount + triangleCount,
