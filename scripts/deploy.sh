@@ -36,8 +36,18 @@ COPYFILE_DISABLE=1 tar czf - \
   --exclude '.DS_Store' \
   . | ssh "$HOST" "tar xzf - -C ~/${REMOTE_DIR}"
 
+# 터널 자격증명이 있으면 공개 도메인까지 함께 올린다. 없으면 테일넷 전용으로만 돈다.
+if ssh "$HOST" "test -f ~/.cloudflared/cert.pem"; then
+  PROFILE="--profile public"
+  echo "▸ Cloudflare Tunnel 자격증명 확인됨. 공개 도메인도 함께 올립니다."
+else
+  PROFILE=""
+  echo "▸ 터널 자격증명이 없어 테일넷 전용으로 올립니다."
+fi
+
 echo "▸ 이미지 빌드 및 기동"
-ssh "$HOST" "cd ~/${REMOTE_DIR} && MESHCAP_PORT=${PORT} docker compose up -d --build"
+ssh "$HOST" "cd ~/${REMOTE_DIR} && MESHCAP_PORT=${PORT} MESHCAP_UID=\$(id -u) MESHCAP_GID=\$(id -g) \
+  docker compose ${PROFILE} up -d --build --remove-orphans"
 
 echo "▸ 응답 확인"
 for attempt in $(seq 1 30); do
@@ -63,11 +73,29 @@ URL="https://${DOMAIN}:${SERVE_PORT}"
 
 echo "▸ 테일넷 경유 확인"
 if curl -fsS -o /dev/null --max-time 20 "$URL"; then
-  echo
-  echo "배포 완료: ${URL}"
+  echo "  ${URL}"
 else
   echo
   echo "컨테이너는 떴지만 테일넷 주소로는 아직 응답하지 않습니다: ${URL}"
   ssh "$HOST" "tailscale serve status"
   exit 1
 fi
+
+if [ -n "$PROFILE" ]; then
+  PUBLIC_URL="${MESHCAP_PUBLIC_URL:-https://meshcap.junnnny.kr}"
+  echo "▸ 공개 도메인 확인 ${PUBLIC_URL}"
+  for attempt in $(seq 1 20); do
+    if curl -fsS -o /dev/null --max-time 15 "$PUBLIC_URL"; then
+      echo "  ${PUBLIC_URL}"
+      break
+    fi
+    if [ "$attempt" -eq 20 ]; then
+      echo "  아직 응답하지 않습니다. 터널 로그를 확인하세요."
+      ssh "$HOST" "cd ~/${REMOTE_DIR} && docker compose logs tunnel --tail 20"
+    fi
+    sleep 3
+  done
+fi
+
+echo
+echo "배포 완료"

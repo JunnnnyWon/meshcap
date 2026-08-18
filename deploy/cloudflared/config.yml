@@ -1,0 +1,15 @@
+# Cloudflare Tunnel 인그레스 규칙.
+#
+# 터널 자격증명(cert.pem, <UUID>.json)은 서버의 ~/.cloudflared 에만 두고 저장소에는
+# 넣지 않는다. 컨테이너 네트워크 안에서 web을 직접 가리키므로 호스트 포트를
+# 인터넷에 열 필요가 없다.
+ingress:
+  - hostname: meshcap.junnnny.kr
+    service: http://web:80
+    originRequest:
+      # 삼백만 삼각형이면 응답이 100MB를 넘고 연산에 10초 이상 걸린다.
+      connectTimeout: 30s
+      tcpKeepAlive: 30s
+      noHappyEyeballs: true
+  # 규칙에 걸리지 않은 요청은 받지 않는다.
+  - service: http_status:404

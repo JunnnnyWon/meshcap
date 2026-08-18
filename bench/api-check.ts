@@ -65,10 +65,19 @@ async function check(label: string, mesh: MeshData, upAxis: 'y' | 'z') {
 const health = await fetch(`${BASE}/api/health`).then((r) => r.json());
 console.log(`서버 ${BASE} · 코어 ${health.cores} · 메모리 ${Math.round(health.totalMemoryMB / 1024)}GB\n`);
 
-for (const entry of SYNTHETIC_BENCH_MODELS) {
-  await check(entry.label, entry.build(), entry.upAxis as 'y');
+// 공개 도메인에는 연산 요청 레이트리밋이 걸려 있다. 연속 호출하면 429가 나므로
+// 요청 사이에 간격을 둔다. 테일넷 주소로 붙을 때는 기다릴 이유가 없다.
+const gapMs = Number(process.env.MESHCAP_GAP_MS ?? (BASE.includes('junnnny.kr') ? 11_000 : 0));
+const pause = () => new Promise((resolve) => setTimeout(resolve, gapMs));
+
+if (process.env.SKIP_SYNTHETIC !== '1') {
+  for (const entry of SYNTHETIC_BENCH_MODELS) {
+    await check(entry.label, entry.build(), entry.upAxis as 'y');
+    await pause();
+  }
 }
 
 for (const path of process.argv.slice(2)) {
   await check(path.split('/').pop() ?? path, readBinarySTL(path), 'z');
+  await pause();
 }

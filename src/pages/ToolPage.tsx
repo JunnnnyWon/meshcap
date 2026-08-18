@@ -8,7 +8,13 @@ import { Badge, Button, SegmentedControl } from '../components/ui.tsx';
 import { loadMeshFromFile } from '../io/loadMesh.ts';
 import { derivedFileName, downloadBlob, toBinarySTL, toGLB } from '../io/exportMesh.ts';
 import { runPipelineInWorker } from '../worker/client.ts';
-import { probeServer, repairOnServer, type ServerInfo } from '../net/remote.ts';
+import {
+  estimatePayloadBytes,
+  probeServer,
+  repairOnServer,
+  uploadLimitBytes,
+  type ServerInfo,
+} from '../net/remote.ts';
 import { STAGE_LABEL, type HoleReport, type PipelineResult, type PipelineStage } from '../core/pipeline.ts';
 import { triangleCount } from '../core/types.ts';
 import type { UpAxis } from '../core/classify.ts';
@@ -88,8 +94,14 @@ export function ToolPage() {
       const options = { upAxis: axis, disableFlatBase: !useFlatBase };
       const triangles = triangleCount(mesh);
 
-      const wantsServer =
+      let wantsServer =
         preference === 'server' || (preference === 'auto' && shouldOffload(triangles, server !== null));
+
+      // 보낼 수 없는 크기라면 올리다가 잘리기 전에 미리 접는다.
+      const payloadBytes = estimatePayloadBytes(mesh);
+      const limitBytes = uploadLimitBytes(server);
+      const tooBigToSend = wantsServer && payloadBytes > limitBytes;
+      if (tooBigToSend) wantsServer = false;
 
       setBusy(true);
       setStatus(null);
@@ -128,7 +140,12 @@ export function ToolPage() {
             outcome = await runLocally();
           }
         } else {
-          if (wantsServer && !server) {
+          if (tooBigToSend) {
+            setNotice(
+              `보낼 기하가 ${(payloadBytes / 1024 / 1024).toFixed(0)}MB로 전송 한계 ` +
+                `${(limitBytes / 1024 / 1024).toFixed(0)}MB를 넘어 브라우저에서 처리했습니다.`,
+            );
+          } else if (preference === 'server' && !server) {
             setNotice('연산 서버에 연결할 수 없어 브라우저에서 처리했습니다.');
           }
           outcome = await runLocally();

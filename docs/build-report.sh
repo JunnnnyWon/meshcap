@@ -71,7 +71,7 @@ officecli add "$FILE" /body --type paragraph --prop text="생성형 3D 서비스
 
 officecli batch "$FILE" --commands "$(cat <<JSON
 [
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · junnnnyserver.tail9d6315.ts.net:8443 (테일넷 전용)","align":"center","size":"10.5pt","font":"Consolas","color":"3A4049","spaceAfter":"4pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · meshcap.junnnny.kr","align":"center","size":"10.5pt","font":"Consolas","color":"3A4049","spaceAfter":"4pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"소스 코드 · github.com/JunnnnyWon/meshcap","align":"center","size":"10.5pt","font":"Consolas","color":"3A4049","spaceAfter":"24pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"2026년 8월 23일 제출 · 측정 기준일 $GENERATED","align":"center","size":"10pt","color":"7C8593"}}
 ]
@@ -567,10 +567,11 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"10. 부록","style":"Heading1","size":"20pt","bold":"true","pageBreakBefore":"true","spaceAfter":"12pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"10.1 산출물 주소","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · https://junnnnyserver.tail9d6315.ts.net:8443","size":"11pt","font":"Consolas","spaceAfter":"4pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · https://meshcap.junnnny.kr","size":"11pt","font":"Consolas","spaceAfter":"4pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"소스 코드 · https://github.com/JunnnnyWon/meshcap","size":"11pt","font":"Consolas","spaceAfter":"12pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"웹사이트는 도구 화면 외에 벤치마크, 알고리즘, 프로젝트 소개 네 개 화면으로 구성되어 있습니다. 알고리즘 화면은 본 리포트 5장과 같은 내용을 담고 있으며, 벤치마크 화면에서는 직접 파일을 넣어 같은 기준으로 측정해 볼 수 있습니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모는 팀이 직접 운영하는 장비에서 Docker로 돌아가며 Tailscale 테일넷 안에서만 열립니다. 테일넷 밖에서는 접근할 수 없으므로, 외부에서 확인하시려면 저장소를 내려받아 아래 명령으로 직접 띄우실 수 있습니다. 정적 사이트라 별도 설정 없이 그대로 동작합니다.","size":"11pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모는 팀이 직접 운영하는 장비에서 Docker로 돌아갑니다. 공개 주소는 Cloudflare Tunnel을 거치므로 서버의 포트를 인터넷에 열지 않았고, 접속자에게 장비의 실제 IP가 드러나지 않습니다. 같은 컨테이너를 Tailscale 테일넷 안에서도 열어 두어 팀 내부에서는 전송 크기 제한 없이 쓸 수 있습니다.","size":"11pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"저장소를 내려받아 직접 띄워 보실 수도 있습니다. 정적 사이트와 연산 서버가 함께 올라옵니다.","size":"11pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"docker compose up -d --build","size":"10.5pt","font":"Consolas","indent":"720","spaceAfter":"12pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"10.2 재현 방법","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},

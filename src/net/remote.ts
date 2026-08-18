@@ -23,6 +23,25 @@ export async function probeServer(timeoutMs = 2500): Promise<ServerInfo | null> 
   }
 }
 
+/**
+ * Cloudflare 무료 플랜은 요청 본문을 100MB에서 자른다. 측정해 보니 95MB는
+ * 통과하고 105MB는 413으로 막혔다. 테일넷 주소로 직접 붙을 때는 이 제한이 없다.
+ */
+const EDGE_UPLOAD_LIMIT_BYTES = 95 * 1024 * 1024;
+
+/** 이 경로로는 얼마까지 올릴 수 있는지. 초과하면 애초에 보내지 않는다. */
+export function uploadLimitBytes(server: ServerInfo | null): number {
+  const serverLimit = (server?.maxUploadMB ?? 512) * 1024 * 1024;
+  // 테일넷 주소로 열었으면 중간에 자르는 edge가 없다.
+  const direct = location.hostname.endsWith('.ts.net') || location.hostname === 'localhost';
+  return direct ? serverLimit : Math.min(serverLimit, EDGE_UPLOAD_LIMIT_BYTES);
+}
+
+/** 좌표와 인덱스를 바이너리로 실어 보낼 때의 대략적인 크기. */
+export function estimatePayloadBytes(mesh: MeshData): number {
+  return mesh.positions.byteLength + mesh.indices.byteLength + 512;
+}
+
 export interface RemoteProgress {
   /** 업로드 진행률 0~1. 스트림을 지원하지 않는 환경에서는 호출되지 않는다. */
   uploaded?: number;
@@ -60,6 +79,12 @@ export function repairOnServer(
     request.onprogress = () => onProgress?.({ phase: 'download' });
 
     request.onload = () => {
+      if (request.status === 413) {
+        // 중간의 프록시가 자른 경우다. 크기를 미리 재서 걸렀어야 하지만,
+        // 한계값이 바뀌어도 도구가 멈추지 않도록 여기서도 받아 준다.
+        reject(new Error('중간 경로에서 요청 크기 제한에 걸렸습니다.'));
+        return;
+      }
       if (request.status !== 200) {
         reject(new Error(describeFailure(request)));
         return;

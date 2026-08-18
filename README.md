@@ -2,7 +2,7 @@
 
 생성형 3D 서비스가 만든 메시의 구멍을 브라우저에서 자동으로 찾아 메우고, 그 결과가 실제로 3D 프린팅 가능한 상태인지 점수로 알려주는 도구입니다.
 
-**[junnnnyserver.tail9d6315.ts.net:8443](https://junnnnyserver.tail9d6315.ts.net:8443)** — 테일넷 안에서만 열립니다
+**[meshcap.junnnny.kr](https://meshcap.junnnny.kr)**
 
 2026 청강 AI 크리에이티브 부스트 공모전 출품작 · 청강문화산업대학교 AI 연구 동아리
 
@@ -84,15 +84,40 @@ npm run build
 
 ## 배포
 
-테일넷 안의 `junnnnyserver`에서 Docker 컨테이너 두 개로 돌아갑니다. `meshcap-web`은 정적 파일을 내려주고 `/api/`를 `meshcap-api`로 넘기며, `meshcap-api`는 Node가 코어를 그대로 실행합니다. Node 24가 TypeScript를 직접 돌리므로 서버 쪽에는 별도 빌드 단계가 없습니다.
+`junnnnyserver`에서 Docker 컨테이너 세 개로 돌아갑니다.
 
-컨테이너 포트는 루프백에만 열리고 외부 노출은 Tailscale Serve가 맡습니다. Funnel을 켜지 않았으므로 인터넷에서는 접근할 수 없습니다.
+| 컨테이너 | 역할 |
+| --- | --- |
+| `meshcap-web` | nginx. 정적 파일을 내려주고 `/api/`를 `meshcap-api`로 넘김 |
+| `meshcap-api` | Node가 `src/core`를 그대로 실행하는 연산 서버 |
+| `meshcap-tunnel` | Cloudflare Tunnel. 공개 도메인을 연결 |
+
+호스트 포트는 루프백에만 열립니다. 공개 주소는 Cloudflare Tunnel이 나가는 연결만으로 연결하므로 방화벽에 구멍을 내지 않고 서버 IP도 드러나지 않습니다. 같은 컨테이너를 Tailscale Serve로 테일넷에도 열어 두었습니다.
+
+| 경로 | 주소 | 전송 상한 |
+| --- | --- | --- |
+| 공개 | `https://meshcap.junnnny.kr` | 95MB (Cloudflare 무료 플랜 100MB 제한) |
+| 테일넷 | `https://junnnnyserver.tail9d6315.ts.net:8443` | 512MB |
+
+연산 요청이 상한을 넘으면 보내기 전에 접고 브라우저에서 처리한 뒤 그 사실을 화면에 알립니다. 삼백만 삼각형짜리 모델은 좌표만 142MB라 공개 경로에서는 항상 브라우저로 처리됩니다.
+
+`/api/repair`에는 분당 6회, 동시 연결 2개 제한을 걸었습니다. 한 번 호출에 수 초의 CPU와 수백 메가바이트를 쓰는 요청이라 공개된 이상 필요한 방어입니다. 값이 싼 `/api/health`에는 걸지 않았습니다.
 
 ```bash
 bash scripts/deploy.sh
 ```
 
 소스를 서버로 보내 그 자리에서 이미지를 만듭니다. 맥은 arm64, 서버는 x86_64라 로컬 이미지를 그대로 옮길 수 없기 때문입니다. 이미지 빌드 과정에 단위 테스트와 타입 검사가 들어 있어 통과하지 못하면 배포되지 않습니다.
+
+터널 자격증명(`~/.cloudflared/cert.pem`)이 서버에 있으면 공개 도메인까지 함께 올리고, 없으면 테일넷 전용으로만 올립니다. 자격증명은 저장소에 넣지 않습니다. 처음 설정할 때만 아래를 한 번 실행합니다.
+
+```bash
+CF="docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp \
+  -v $HOME/.cloudflared:/tmp/.cloudflared cloudflare/cloudflared:latest"
+$CF tunnel login                                   # 브라우저에서 영역 승인
+$CF tunnel create meshcap
+$CF tunnel route dns meshcap meshcap.junnnny.kr
+```
 
 포트나 호스트를 바꾸려면 환경 변수를 넘깁니다.
 

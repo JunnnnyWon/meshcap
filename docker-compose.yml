@@ -21,6 +21,31 @@ services:
         max-size: '10m'
         max-file: '3'
 
+  # 공개 도메인으로 내보내는 터널. 자격증명이 없으면 프로필이 꺼져 있어
+  # 테일넷 전용으로만 돌아간다.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: meshcap-tunnel
+    restart: unless-stopped
+    profiles: ['public']
+    depends_on:
+      - web
+    # 이미지 기본 사용자(nonroot)로는 호스트의 자격증명 파일을 읽을 수 없다.
+    # 600 권한 그대로 두고 소유자로 실행하는 편이 파일 권한을 푸는 것보다 안전하다.
+    user: '${MESHCAP_UID:-1000}:${MESHCAP_GID:-1000}'
+    environment:
+      TUNNEL_ORIGIN_CERT: /etc/cloudflared/cert.pem
+      HOME: /tmp
+    volumes:
+      - ${HOME}/.cloudflared:/etc/cloudflared:ro
+      - ./deploy/cloudflared/config.yml:/etc/cloudflared-config/config.yml:ro
+    command: tunnel --no-autoupdate --config /etc/cloudflared-config/config.yml run ${MESHCAP_TUNNEL:-meshcap}
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   api:
     build:
       context: .
