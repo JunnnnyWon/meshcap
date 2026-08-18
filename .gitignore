@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.vite/
+
+# 벤치마크 원본 모델은 용량이 커서 GitHub Release로 배포한다.
+bench/models/**
+!bench/models/.gitkeep
+!bench/models/README.md

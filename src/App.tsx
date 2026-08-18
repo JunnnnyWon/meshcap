@@ -1,0 +1,90 @@
+import { useRoute, type Route } from './router.ts';
+import { ToolPage } from './pages/ToolPage.tsx';
+import { BenchmarkPage } from './pages/BenchmarkPage.tsx';
+import { MethodPage } from './pages/MethodPage.tsx';
+import { AboutPage } from './pages/AboutPage.tsx';
+
+const NAV: { id: Route; label: string; sub: string }[] = [
+  { id: 'tool', label: '진단 · 보정', sub: 'Tool' },
+  { id: 'benchmark', label: '벤치마크', sub: 'Meshy vs Tripo' },
+  { id: 'method', label: '알고리즘', sub: 'Method' },
+  { id: 'about', label: '프로젝트', sub: 'About' },
+];
+
+export const REPO_URL = 'https://github.com/JunnnnyWon/meshcap';
+
+function Mark() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2.5 21 7.5v9L12 21.5 3 16.5v-9z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M3 7.5 12 12.5l9-5M12 12.5v9" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" opacity="0.45" />
+      <path d="M12 2.5 21 7.5l-9 5-9-5z" fill="currentColor" opacity="0.85" />
+    </svg>
+  );
+}
+
+export function App() {
+  const [route, navigate] = useRoute();
+
+  return (
+    <div className="min-h-screen flex flex-col bg-ink-950">
+      <header className="sticky top-0 z-40 border-b border-ink-800 bg-ink-950/85 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1600px] px-5 h-14 flex items-center gap-8">
+          <button
+            onClick={() => navigate('tool')}
+            className="flex items-center gap-2.5 text-ink-100 hover:text-amber-accent transition-colors shrink-0"
+          >
+            <span className="text-amber-accent">
+              <Mark />
+            </span>
+            <span className="font-mono text-[15px] font-semibold tracking-[0.16em]">MESHCAP</span>
+          </button>
+
+          <nav className="flex items-center gap-1 overflow-x-auto">
+            {NAV.map((item) => {
+              const active = route === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => navigate(item.id)}
+                  className={`group relative px-3.5 py-1.5 rounded-md text-[13px] whitespace-nowrap transition-colors ${
+                    active ? 'text-ink-100' : 'text-ink-400 hover:text-ink-300'
+                  }`}
+                >
+                  {item.label}
+                  <span
+                    className={`absolute inset-x-3 -bottom-[13px] h-px transition-colors ${
+                      active ? 'bg-amber-accent' : 'bg-transparent'
+                    }`}
+                  />
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-4 shrink-0">
+            <span className="hidden lg:inline label-caps">브라우저 내 처리 · 업로드 없음</span>
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-ink-400 hover:text-ink-100 transition-colors"
+              aria-label="GitHub 저장소"
+            >
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col">
+        {route === 'tool' && <ToolPage />}
+        {route === 'benchmark' && <BenchmarkPage />}
+        {route === 'method' && <MethodPage />}
+        {route === 'about' && <AboutPage />}
+      </main>
+    </div>
+  );
+}

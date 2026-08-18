@@ -1,0 +1,42 @@
+{
+  "name": "meshcap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "3D AI 생성 메시의 구멍을 자동 탐지·분류·Cap하는 브라우저 전용 도구",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "bench": "tsx bench/run.ts"
+  },
+  "keywords": [
+    "3d-printing",
+    "mesh-repair",
+    "hole-filling",
+    "three.js"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "earcut": "^3.2.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/earcut": "^3.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/three": "^0.185.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
