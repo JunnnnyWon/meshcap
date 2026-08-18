@@ -2,7 +2,7 @@
 
 생성형 3D 서비스가 만든 메시의 구멍을 브라우저에서 자동으로 찾아 메우고, 그 결과가 실제로 3D 프린팅 가능한 상태인지 점수로 알려주는 도구입니다.
 
-**[junnnnywon.github.io/meshcap](https://junnnnywon.github.io/meshcap)**
+**[junnnnyserver.tail9d6315.ts.net:8443](https://junnnnyserver.tail9d6315.ts.net:8443)** — 테일넷 안에서만 열립니다
 
 2026 청강 AI 크리에이티브 부스트 공모전 출품작 · 청강문화산업대학교 AI 연구 동아리
 
@@ -39,7 +39,7 @@ MeshCap은 대신 **반대 방향 짝을 찾지 못하고 남은 half-edge**를 
 
 **법선 정렬을 구멍 탐지보다 먼저 하지 않으면** 뒤집힌 면이 구멍으로 둔갑합니다. 뒤집힌 면은 자기 에지 세 개의 방향 짝을 깨뜨리므로, 멀쩡히 막혀 있는 자리에 짝 없는 half-edge가 남습니다. 대조군 `결함 합성 회전체`에서 정렬 전에는 테두리가 86개로 잡히지만 실제 구멍은 4개뿐이고, 나머지를 그대로 메우면 막혀 있는 표면 위에 없는 면이 덧붙어 부피가 달라집니다.
 
-자세한 근거는 [알고리즘 페이지](https://junnnnywon.github.io/meshcap/#/method)와 `src/core/__tests__/samples.test.ts`에 있습니다.
+자세한 근거는 배포된 사이트의 알고리즘 페이지와 `src/core/__tests__/samples.test.ts`에 있습니다.
 
 ## 구멍 분류와 전략
 
@@ -64,7 +64,25 @@ npm run bench      # 합성 대조군 벤치마크 → src/bench/results.json
 npm run build
 ```
 
-`main`에 푸시하면 GitHub Actions가 테스트를 돌리고 GitHub Pages로 배포합니다.
+`main`에 푸시하면 GitHub Actions가 테스트와 이미지 빌드를 검증합니다. 배포는 하지 않습니다.
+
+## 배포
+
+테일넷 안의 `junnnnyserver`에서 Docker로 돌아갑니다. nginx가 정적 파일을 서빙하고, 컨테이너 포트는 루프백에만 열리며 외부 노출은 Tailscale Serve가 맡습니다. Funnel을 켜지 않았으므로 인터넷에서는 접근할 수 없습니다.
+
+```bash
+bash scripts/deploy.sh
+```
+
+소스를 서버로 보내 그 자리에서 이미지를 만듭니다. 맥은 arm64, 서버는 x86_64라 로컬 이미지를 그대로 옮길 수 없기 때문입니다. 이미지 빌드 과정에 단위 테스트와 타입 검사가 들어 있어 통과하지 못하면 배포되지 않습니다.
+
+포트나 호스트를 바꾸려면 환경 변수를 넘깁니다.
+
+| 변수 | 기본값 | 뜻 |
+| --- | --- | --- |
+| `MESHCAP_HOST` | `junnnnyserver` | 배포 대상 SSH 호스트 |
+| `MESHCAP_PORT` | `8788` | 서버 루프백에 여는 컨테이너 포트 |
+| `MESHCAP_SERVE_PORT` | `8443` | Tailscale Serve가 여는 HTTPS 포트 |
 
 최종 리포트도 스크립트로 만듭니다. 본문에 인용하는 수치를 `src/bench/results.json`에서 직접 읽어오므로, 알고리즘을 고치고 측정을 다시 돌리면 문서의 숫자도 함께 갱신됩니다.
 

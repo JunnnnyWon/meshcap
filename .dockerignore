@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+dist
+docs
+scripts
+bench/exports
+bench/models
+*.md
+.DS_Store

@@ -71,7 +71,7 @@ officecli add "$FILE" /body --type paragraph --prop text="생성형 3D 서비스
 
 officecli batch "$FILE" --commands "$(cat <<JSON
 [
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · junnnnywon.github.io/meshcap","align":"center","size":"10.5pt","font":"Consolas","color":"3A4049","spaceAfter":"4pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · junnnnyserver.tail9d6315.ts.net:8443 (테일넷 전용)","align":"center","size":"10.5pt","font":"Consolas","color":"3A4049","spaceAfter":"4pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"소스 코드 · github.com/JunnnnyWon/meshcap","align":"center","size":"10.5pt","font":"Consolas","color":"3A4049","spaceAfter":"24pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"2026년 8월 23일 제출 · 측정 기준일 $GENERATED","align":"center","size":"10pt","color":"7C8593"}}
 ]
@@ -178,7 +178,7 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"4. 시스템 설계","style":"Heading1","size":"20pt","bold":"true","pageBreakBefore":"true","spaceAfter":"12pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"4.1 설계 원칙","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"서버를 두지 않기로 한 것이 첫 번째 결정입니다. 모델 파일은 창작물이고, 공모전 출품작을 남의 서버에 올리는 일은 그 자체로 부담입니다. 또한 서버가 없으면 심사 기간 중 서비스가 죽을 위험도, 운영 비용도 없습니다. 계산은 전부 브라우저에서 수행하고 GitHub Pages는 정적 파일만 내려줍니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"계산을 서버로 보내지 않기로 한 것이 첫 번째 결정입니다. 모델 파일은 창작물이고, 남의 서버에 올리는 일은 그 자체로 부담입니다. 처리를 전부 브라우저에서 하면 업로드가 아예 없으므로 이 문제가 사라지고, 사용자가 늘어도 서버가 감당할 일이 없습니다. 배포된 것은 정적 파일을 내려주는 nginx 컨테이너 하나뿐이며, 팀이 직접 운영하는 장비에서 Tailscale 테일넷 안에만 열려 있습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 번째는 알고리즘 코어를 three.js에서 떼어 놓은 것입니다. 코어는 좌표 배열과 인덱스 배열만 다루는 순수 TypeScript이며 렌더링 라이브러리를 참조하지 않습니다. 덕분에 같은 코드를 브라우저 워커와 node 벤치마크 스크립트에서 그대로 실행할 수 있고, 화면에 보이는 점수와 리포트에 실린 수치가 어긋나지 않습니다. 단위 테스트도 렌더링 환경 없이 돌아갑니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"세 번째는 무거운 계산을 웹 워커로 옮긴 것입니다. 수십만 삼각형짜리 메시에서는 위상 분석과 삼각화에 몇 초가 걸리는데, 메인 스레드에서 돌리면 그동안 화면이 완전히 멈춰 사용자가 브라우저가 죽은 것으로 오해합니다.","size":"11pt","spaceAfter":"8pt"}},
 
@@ -565,9 +565,11 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"10. 부록","style":"Heading1","size":"20pt","bold":"true","pageBreakBefore":"true","spaceAfter":"12pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"10.1 산출물 주소","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · https://junnnnywon.github.io/meshcap","size":"11pt","font":"Consolas","spaceAfter":"4pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모 · https://junnnnyserver.tail9d6315.ts.net:8443","size":"11pt","font":"Consolas","spaceAfter":"4pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"소스 코드 · https://github.com/JunnnnyWon/meshcap","size":"11pt","font":"Consolas","spaceAfter":"12pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"웹사이트는 도구 화면 외에 벤치마크, 알고리즘, 프로젝트 소개 네 개 화면으로 구성되어 있습니다. 알고리즘 화면은 본 리포트 5장과 같은 내용을 담고 있으며, 벤치마크 화면에서는 직접 파일을 넣어 같은 기준으로 측정해 볼 수 있습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"라이브 데모는 팀이 직접 운영하는 장비에서 Docker로 돌아가며 Tailscale 테일넷 안에서만 열립니다. 테일넷 밖에서는 접근할 수 없으므로, 외부에서 확인하시려면 저장소를 내려받아 아래 명령으로 직접 띄우실 수 있습니다. 정적 사이트라 별도 설정 없이 그대로 동작합니다.","size":"11pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"docker compose up -d --build","size":"10.5pt","font":"Consolas","indent":"720","spaceAfter":"12pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"10.2 재현 방법","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"저장소를 내려받고 의존성을 설치한 뒤 다음 명령으로 리포트의 모든 수치를 재현할 수 있습니다.","size":"11pt","spaceAfter":"10pt"}}

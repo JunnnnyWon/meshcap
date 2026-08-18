@@ -112,9 +112,9 @@ export function AboutPage() {
 
         <Section title="개인정보 처리">
           <p className="text-[13.5px] leading-relaxed text-ink-300">
-            이 사이트에는 서버가 없습니다. 넣은 모델 파일은 브라우저 메모리에서만 처리되며 어디로도
-            전송되지 않습니다. 분석 스크립트나 쿠키도 사용하지 않습니다. GitHub Pages가 정적 파일만
-            내려줍니다.
+            넣은 모델 파일은 브라우저 메모리에서만 처리되며 어디로도 전송되지 않습니다. 분석
+            스크립트나 쿠키도 사용하지 않습니다. 서버는 정적 파일을 내려주는 nginx 컨테이너
+            하나뿐이고, 팀이 직접 운영하는 장비에서 Tailscale 테일넷 안에만 열려 있습니다.
           </p>
         </Section>
 
