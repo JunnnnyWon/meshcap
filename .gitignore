@@ -8,3 +8,6 @@ dist/
 bench/models/**
 !bench/models/.gitkeep
 !bench/models/README.md
+
+# 출력 테스트용 STL은 스크립트로 언제든 재생성한다.
+bench/exports/

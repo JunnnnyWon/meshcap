@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p bench/tsconfig.json",
-    "bench": "tsx bench/run.ts"
+    "bench": "tsx bench/run.ts",
+    "export:stl": "tsx bench/export-stl.ts"
   },
   "keywords": [
     "3d-printing",
