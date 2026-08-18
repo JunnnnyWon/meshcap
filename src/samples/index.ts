@@ -202,7 +202,7 @@ function buildWavyTube(): MeshData {
 export const SAMPLES: SampleModel[] = [
   {
     id: 'bust',
-    name: '결함 합성 흉상',
+    name: '결함 합성 회전체',
     description: '바닥 개구부, 표면 구멍 3개, 쪼개진 정점, 뒤집힌 면을 모두 담은 예제',
     upAxis: 'y',
     build: buildDefectiveBust,

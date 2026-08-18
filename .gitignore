@@ -11,3 +11,6 @@ bench/models/**
 
 # 출력 테스트용 STL은 스크립트로 언제든 재생성한다.
 bench/exports/
+
+# 캡처본은 스크립트로 재생성한다.
+docs/figures/

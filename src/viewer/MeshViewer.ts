@@ -8,15 +8,18 @@ import {
   Group,
   HemisphereLight,
   LineBasicMaterial,
-  LineSegments,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
   Scene,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { MeshData } from '../core/types.ts';
 import { computeBounds } from '../core/types.ts';
 import type { UpAxis } from '../core/classify.ts';
@@ -49,12 +52,12 @@ export class MeshViewer {
 
   private beforeMesh: Mesh | null = null;
   private afterMesh: Mesh | null = null;
-  private holeLines: LineSegments | null = null;
+  private holeLines: LineSegments2 | null = null;
   private grid: GridHelper | null = null;
 
   private surfaceMaterial: MeshStandardMaterial;
   private capMaterial: MeshStandardMaterial;
-  private holeMaterial: LineBasicMaterial;
+  private holeMaterial: LineMaterial;
 
   private mode: ViewMode = 'before';
   private radius = 1;
@@ -108,9 +111,12 @@ export class MeshViewer {
       emissive: new Color(0x0b3b45),
       flatShading: true,
     });
-    // 구멍이 모델 뒤에 숨어 있어도 보여야 찾을 수 있다.
-    this.holeMaterial = new LineBasicMaterial({
+    // WebGL의 기본 선은 굵기를 1픽셀 넘게 줄 수 없어 큰 모델에서 테두리가 거의 보이지 않는다.
+    // 구멍을 찾는 것이 이 도구의 핵심이므로 화면 공간 굵기를 지원하는 재질을 쓴다.
+    // depthTest를 끈 것은 모델 뒤에 숨은 구멍도 찾을 수 있어야 하기 때문이다.
+    this.holeMaterial = new LineMaterial({
       color: COLOR_HOLE,
+      linewidth: 2.4,
       depthTest: false,
       transparent: true,
       opacity: 0.95,
@@ -210,6 +216,9 @@ export class MeshViewer {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+
+    // 화면 공간 굵기 계산에 필요하다. 갱신하지 않으면 창 크기를 바꿀 때 선이 뒤틀린다.
+    this.holeMaterial.resolution = new Vector2(width, height);
   }
 
   dispose(): void {
@@ -225,7 +234,7 @@ export class MeshViewer {
   private clearContent(): void {
     for (const child of [...this.content.children]) {
       this.content.remove(child);
-      disposeObject(child as Mesh | LineSegments);
+      disposeObject(child as Mesh | LineSegments2);
     }
     if (this.grid) {
       this.scene.remove(this.grid);
@@ -269,8 +278,8 @@ function toGeometry(mesh: MeshData): BufferGeometry {
 function buildLoopLines(
   mesh: MeshData,
   loops: number[][],
-  material: LineBasicMaterial,
-): LineSegments | null {
+  material: LineMaterial,
+): LineSegments2 | null {
   if (loops.length === 0) return null;
 
   const points: number[] = [];
@@ -289,10 +298,10 @@ function buildLoopLines(
     }
   }
 
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new BufferAttribute(new Float32Array(points), 3));
+  const geometry = new LineSegmentsGeometry();
+  geometry.setPositions(points);
 
-  const lines = new LineSegments(geometry, material);
+  const lines = new LineSegments2(geometry, material);
   lines.renderOrder = 10;
   return lines;
 }
@@ -317,7 +326,7 @@ function buildBedGrid(bounds: ReturnType<typeof computeBounds>, upIndex: number)
   return grid;
 }
 
-function disposeObject(object: Mesh | LineSegments): void {
+function disposeObject(object: Mesh | LineSegments2): void {
   object.geometry?.dispose();
 }
 

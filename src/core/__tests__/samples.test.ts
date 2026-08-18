@@ -6,7 +6,7 @@ const bust = SAMPLES.find((s) => s.id === 'bust');
 const wavy = SAMPLES.find((s) => s.id === 'wavy');
 
 describe('합성 샘플 회귀', () => {
-  it('결함 흉상을 완전히 밀폐한다', () => {
+  it('결함 회전체를 완전히 밀폐한다', () => {
     const result = runPipeline(bust!.build(), { upAxis: bust!.upAxis });
 
     expect(result.repaired.watertight).toBe(true);

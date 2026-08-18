@@ -136,7 +136,7 @@ export const SYNTHETIC_BENCH_MODELS: SyntheticBenchModel[] = [
   },
   {
     id: 'syn-bust',
-    label: '결함 합성 흉상',
+    label: '결함 합성 회전체',
     concept: '난이도 중',
     upAxis: 'y',
     build: () => bust!.build(),

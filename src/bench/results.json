@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-18T09:11:37.829Z",
+  "generatedAt": "2026-08-18T09:24:52.321Z",
   "note": "합성 대조군. 실제 서비스 출력물은 웹 벤치마크 페이지에서 측정해 병합한다.",
   "models": [
     {
@@ -41,7 +41,7 @@
           "volume": 4.166781805604081,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 6.06
+          "elapsedMs": 5.4
         },
         "naiveFan": {
           "vertices": 1490,
@@ -57,7 +57,7 @@
           "volume": 4.166781805604081,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 7.6
+          "elapsedMs": 7.56
         },
         "meshcap": {
           "vertices": 1490,
@@ -73,7 +73,7 @@
           "volume": 4.166781805604081,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 8.48
+          "elapsedMs": 8.93
         }
       },
       "strategyCounts": {},
@@ -122,7 +122,7 @@
           "volume": 3.8765764816056536,
           "score": 64,
           "grade": "D",
-          "elapsedMs": 2.57
+          "elapsedMs": 2.53
         },
         "naiveFan": {
           "vertices": 1450,
@@ -138,7 +138,7 @@
           "volume": 4.155239085559564,
           "score": 99,
           "grade": "A",
-          "elapsedMs": 20.2
+          "elapsedMs": 18.58
         },
         "meshcap": {
           "vertices": 1441,
@@ -154,7 +154,7 @@
           "volume": 4.161297588396113,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 26.03
+          "elapsedMs": 18.92
         }
       },
       "strategyCounts": {
@@ -168,7 +168,7 @@
     },
     {
       "id": "syn-bust",
-      "label": "결함 합성 흉상",
+      "label": "결함 합성 회전체",
       "source": "synthetic",
       "concept": "난이도 중",
       "fileName": "syn-bust.generated",
@@ -205,7 +205,7 @@
           "volume": 1.0510057998913154,
           "score": 39,
           "grade": "F",
-          "elapsedMs": 1.07
+          "elapsedMs": 1.17
         },
         "naiveFan": {
           "vertices": 430,
@@ -221,7 +221,7 @@
           "volume": 1.102362528619246,
           "score": 40,
           "grade": "F",
-          "elapsedMs": 4.94
+          "elapsedMs": 4.59
         },
         "meshcap": {
           "vertices": 428,
@@ -237,7 +237,7 @@
           "volume": 1.2946825960042574,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 10.58
+          "elapsedMs": 10.64
         }
       },
       "strategyCounts": {
@@ -289,7 +289,7 @@
           "volume": 1.8419855768924054,
           "score": 65,
           "grade": "D",
-          "elapsedMs": 0.07
+          "elapsedMs": 0.11
         },
         "naiveFan": {
           "vertices": 98,
@@ -305,7 +305,7 @@
           "volume": 2.762978357714242,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 2.98
+          "elapsedMs": 3.79
         },
         "meshcap": {
           "vertices": 144,
@@ -321,7 +321,7 @@
           "volume": 3.135401779497441,
           "score": 100,
           "grade": "A",
-          "elapsedMs": 13.36
+          "elapsedMs": 12.5
         }
       },
       "strategyCounts": {
@@ -373,7 +373,7 @@
           "volume": 2.755203034199836,
           "score": 34,
           "grade": "F",
-          "elapsedMs": 3.63
+          "elapsedMs": 5.42
         },
         "naiveFan": {
           "vertices": 2125,
@@ -389,7 +389,7 @@
           "volume": 2.755203034199836,
           "score": 34,
           "grade": "F",
-          "elapsedMs": 7.86
+          "elapsedMs": 9.5
         },
         "meshcap": {
           "vertices": 2303,
@@ -405,7 +405,7 @@
           "volume": 4.2764101856375305,
           "score": 96,
           "grade": "A",
-          "elapsedMs": 31.16
+          "elapsedMs": 28.16
         }
       },
       "strategyCounts": {
