@@ -1,0 +1,423 @@
+{
+  "generatedAt": "2026-08-18T09:11:37.829Z",
+  "note": "합성 대조군. 실제 서비스 출력물은 웹 벤치마크 페이지에서 측정해 병합한다.",
+  "models": [
+    {
+      "id": "syn-split-only",
+      "label": "정점 분리만 있는 구",
+      "source": "synthetic",
+      "concept": "난이도 하",
+      "fileName": "syn-split-only.generated",
+      "fileBytes": 147456,
+      "upAxis": "y",
+      "variants": {
+        "raw": {
+          "vertices": 9216,
+          "triangles": 3072,
+          "addedTriangles": 0,
+          "boundaryEdges": 9216,
+          "holes": 3072,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 3072,
+          "degenerateTriangles": 96,
+          "watertight": false,
+          "volume": 4.166781805604081,
+          "score": 45,
+          "grade": "F",
+          "elapsedMs": 0
+        },
+        "weldOnly": {
+          "vertices": 1490,
+          "triangles": 2976,
+          "addedTriangles": -96,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 4.166781805604081,
+          "score": 100,
+          "grade": "A",
+          "elapsedMs": 6.06
+        },
+        "naiveFan": {
+          "vertices": 1490,
+          "triangles": 2976,
+          "addedTriangles": -96,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 4.166781805604081,
+          "score": 100,
+          "grade": "A",
+          "elapsedMs": 7.6
+        },
+        "meshcap": {
+          "vertices": 1490,
+          "triangles": 2976,
+          "addedTriangles": -96,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 4.166781805604081,
+          "score": 100,
+          "grade": "A",
+          "elapsedMs": 8.48
+        }
+      },
+      "strategyCounts": {},
+      "weld": {
+        "mergedVertices": 7726,
+        "mergedRatio": 0.8383246527777778
+      },
+      "largestHoleRelativeSize": 0
+    },
+    {
+      "id": "syn-scattered",
+      "label": "작은 구멍이 흩어진 구",
+      "source": "synthetic",
+      "concept": "난이도 중",
+      "fileName": "syn-scattered.generated",
+      "fileBytes": 130800,
+      "upAxis": "y",
+      "variants": {
+        "raw": {
+          "vertices": 8175,
+          "triangles": 2725,
+          "addedTriangles": 0,
+          "boundaryEdges": 8175,
+          "holes": 2725,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 2725,
+          "degenerateTriangles": 48,
+          "watertight": false,
+          "volume": 3.8765764816056536,
+          "score": 45,
+          "grade": "F",
+          "elapsedMs": 0
+        },
+        "weldOnly": {
+          "vertices": 1441,
+          "triangles": 2677,
+          "addedTriangles": -48,
+          "boundaryEdges": 221,
+          "holes": 9,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 3.8765764816056536,
+          "score": 64,
+          "grade": "D",
+          "elapsedMs": 2.57
+        },
+        "naiveFan": {
+          "vertices": 1450,
+          "triangles": 2898,
+          "addedTriangles": 173,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 2,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 4.155239085559564,
+          "score": 99,
+          "grade": "A",
+          "elapsedMs": 20.2
+        },
+        "meshcap": {
+          "vertices": 1441,
+          "triangles": 2878,
+          "addedTriangles": 153,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 4.161297588396113,
+          "score": 100,
+          "grade": "A",
+          "elapsedMs": 26.03
+        }
+      },
+      "strategyCounts": {
+        "planar": 9
+      },
+      "weld": {
+        "mergedVertices": 6734,
+        "mergedRatio": 0.8237308868501529
+      },
+      "largestHoleRelativeSize": 1.4065
+    },
+    {
+      "id": "syn-bust",
+      "label": "결함 합성 흉상",
+      "source": "synthetic",
+      "concept": "난이도 중",
+      "fileName": "syn-bust.generated",
+      "fileBytes": 23508,
+      "upAxis": "y",
+      "variants": {
+        "raw": {
+          "vertices": 1200,
+          "triangles": 759,
+          "addedTriangles": 0,
+          "boundaryEdges": 1209,
+          "holes": 319,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 65,
+          "components": 254,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 1.0510057998913154,
+          "score": 15,
+          "grade": "F",
+          "elapsedMs": 0
+        },
+        "weldOnly": {
+          "vertices": 428,
+          "triangles": 759,
+          "addedTriangles": 0,
+          "boundaryEdges": 101,
+          "holes": 5,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 130,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 1.0510057998913154,
+          "score": 39,
+          "grade": "F",
+          "elapsedMs": 1.07
+        },
+        "naiveFan": {
+          "vertices": 430,
+          "triangles": 793,
+          "addedTriangles": 34,
+          "boundaryEdges": 67,
+          "holes": 3,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 130,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 1.102362528619246,
+          "score": 40,
+          "grade": "F",
+          "elapsedMs": 4.94
+        },
+        "meshcap": {
+          "vertices": 428,
+          "triangles": 852,
+          "addedTriangles": 93,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 1.2946825960042574,
+          "score": 100,
+          "grade": "A",
+          "elapsedMs": 10.58
+        }
+      },
+      "strategyCounts": {
+        "planar": 2,
+        "liepa": 2
+      },
+      "weld": {
+        "mergedVertices": 755,
+        "mergedRatio": 0.6291666666666667
+      },
+      "largestHoleRelativeSize": 1.6824
+    },
+    {
+      "id": "syn-wavy",
+      "label": "물결 개구부 튜브",
+      "source": "synthetic",
+      "concept": "난이도 상",
+      "fileName": "syn-wavy.generated",
+      "fileBytes": 2304,
+      "upAxis": "y",
+      "variants": {
+        "raw": {
+          "vertices": 96,
+          "triangles": 96,
+          "addedTriangles": 0,
+          "boundaryEdges": 96,
+          "holes": 2,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 1.8419855768924054,
+          "score": 65,
+          "grade": "D",
+          "elapsedMs": 0
+        },
+        "weldOnly": {
+          "vertices": 96,
+          "triangles": 96,
+          "addedTriangles": 0,
+          "boundaryEdges": 96,
+          "holes": 2,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 1.8419855768924054,
+          "score": 65,
+          "grade": "D",
+          "elapsedMs": 0.07
+        },
+        "naiveFan": {
+          "vertices": 98,
+          "triangles": 192,
+          "addedTriangles": 96,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 2.762978357714242,
+          "score": 100,
+          "grade": "A",
+          "elapsedMs": 2.98
+        },
+        "meshcap": {
+          "vertices": 144,
+          "triangles": 284,
+          "addedTriangles": 188,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": true,
+          "volume": 3.135401779497441,
+          "score": 100,
+          "grade": "A",
+          "elapsedMs": 13.36
+        }
+      },
+      "strategyCounts": {
+        "flatBase": 1,
+        "liepa": 1
+      },
+      "weld": {
+        "mergedVertices": 0,
+        "mergedRatio": 0
+      },
+      "largestHoleRelativeSize": 2.0724
+    },
+    {
+      "id": "syn-worst",
+      "label": "복합 결함 구",
+      "source": "synthetic",
+      "concept": "난이도 상",
+      "fileName": "syn-worst.generated",
+      "fileBytes": 179712,
+      "upAxis": "y",
+      "variants": {
+        "raw": {
+          "vertices": 11232,
+          "triangles": 3744,
+          "addedTriangles": 0,
+          "boundaryEdges": 11232,
+          "holes": 3744,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 3744,
+          "degenerateTriangles": 64,
+          "watertight": false,
+          "volume": 2.7552030341998353,
+          "score": 45,
+          "grade": "F",
+          "elapsedMs": 0
+        },
+        "weldOnly": {
+          "vertices": 2125,
+          "triangles": 3680,
+          "addedTriangles": -64,
+          "boundaryEdges": 566,
+          "holes": 46,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 788,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 2.755203034199836,
+          "score": 34,
+          "grade": "F",
+          "elapsedMs": 3.63
+        },
+        "naiveFan": {
+          "vertices": 2125,
+          "triangles": 3680,
+          "addedTriangles": -64,
+          "boundaryEdges": 566,
+          "holes": 46,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 788,
+          "components": 1,
+          "degenerateTriangles": 0,
+          "watertight": false,
+          "volume": 2.755203034199836,
+          "score": 34,
+          "grade": "F",
+          "elapsedMs": 7.86
+        },
+        "meshcap": {
+          "vertices": 2303,
+          "triangles": 4572,
+          "addedTriangles": 828,
+          "boundaryEdges": 0,
+          "holes": 0,
+          "nonManifoldEdges": 0,
+          "inconsistentEdges": 0,
+          "components": 1,
+          "degenerateTriangles": 2,
+          "watertight": true,
+          "volume": 4.2764101856375305,
+          "score": 96,
+          "grade": "A",
+          "elapsedMs": 31.16
+        }
+      },
+      "strategyCounts": {
+        "planar": 10,
+        "flatBase": 4,
+        "liepa": 1
+      },
+      "weld": {
+        "mergedVertices": 9107,
+        "mergedRatio": 0.8108084045584045
+      },
+      "largestHoleRelativeSize": 2.9505
+    }
+  ]
+}

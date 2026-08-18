@@ -34,6 +34,11 @@ export interface ClassifyOptions {
   flatBaseMinRelativeSize?: number;
   /** 바닥 받침으로 처리하지 않고 일반 구멍으로 둘 때 사용한다. */
   disableFlatBase?: boolean;
+  /**
+   * 분류를 무시하고 모든 구멍에 같은 전략을 강제한다.
+   * 분류기가 실제로 기여하는 몫을 재는 절제 실험에 쓴다.
+   */
+  forceStrategy?: CapStrategy;
 }
 
 export interface LoopMetrics {
@@ -58,13 +63,17 @@ export interface LoopMetrics {
 
 const AXIS_INDEX: Record<UpAxis, number> = { x: 0, y: 1, z: 2 };
 
-export const DEFAULT_CLASSIFY_OPTIONS: Required<Omit<ClassifyOptions, 'upAxis'>> & { upAxis: UpAxis } = {
+export const DEFAULT_CLASSIFY_OPTIONS: Required<Omit<ClassifyOptions, 'upAxis' | 'forceStrategy'>> & {
+  upAxis: UpAxis;
+  forceStrategy: CapStrategy | undefined;
+} = {
   upAxis: 'y',
   fanMaxVertices: 8,
   planarityThreshold: 0.06,
   liepaMaxVertices: 250,
   flatBaseMinRelativeSize: 0.04,
   disableFlatBase: false,
+  forceStrategy: undefined,
 };
 
 /**
@@ -147,9 +156,10 @@ function pickStrategy(
   n: number,
   planarity: number,
   bottomFacing: boolean,
-  opts: Required<ClassifyOptions>,
+  opts: typeof DEFAULT_CLASSIFY_OPTIONS,
 ): CapStrategy {
   if (!loop.closed || n < 3) return 'skip';
+  if (opts.forceStrategy) return n === 3 ? 'single' : opts.forceStrategy;
   if (n === 3) return 'single';
   if (bottomFacing) return 'flatBase';
   if (n <= opts.fanMaxVertices) return 'fan';
