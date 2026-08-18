@@ -1,5 +1,13 @@
 import type { MeshData } from './types.ts';
 
+export interface OrientOptions {
+  /**
+   * 껍질마다 부호 있는 부피를 재서 안쪽을 향하는 덩어리를 통째로 뒤집을지 여부.
+   * 부피 부호는 닫힌 메시에서만 의미가 있으므로, 구멍을 메우기 전 단계에서는 꺼야 한다.
+   */
+  alignOutward?: boolean;
+}
+
 export interface OrientResult {
   mesh: MeshData;
   /** 감는 방향을 뒤집은 삼각형 수. */
@@ -22,14 +30,19 @@ function rawHasDirected(indices: Uint32Array, f: number, u: number, v: number): 
 }
 
 /**
- * 면의 감는 방향을 이웃과 일관되게 맞추고, 껍질마다 법선이 바깥을 향하도록 뒤집는다.
+ * 면의 감는 방향을 이웃과 일관되게 맞추고, 선택적으로 껍질이 바깥을 향하게 뒤집는다.
  *
  * 생성형 AI 출력물은 면 방향이 뒤죽박죽인 경우가 많다. 슬라이서는 법선으로
  * 안팎을 판정하므로, 방향이 섞여 있으면 멀쩡히 닫힌 메시도 속이 빈 껍데기나
- * 뒤집힌 덩어리로 해석된다. 구멍을 다 메운 뒤에 실행해야 껍질별 부피 판정이
- * 의미를 갖는다.
+ * 뒤집힌 덩어리로 해석된다.
+ *
+ * 방향 통일은 구멍을 찾기 전에 해야 한다. 뒤집힌 면이 구멍 테두리에 닿아 있으면
+ * 그 지점에서 경계 에지의 진행 방향이 거꾸로 뒤집혀 테두리 추적이 끊기고, 멀쩡한
+ * 구멍 하나가 여러 개의 열린 사슬로 쪼개져 메울 수 없게 된다. 반면 껍질을 바깥으로
+ * 돌리는 판정은 부피 부호에 기대므로 구멍을 다 메운 뒤여야 의미가 있다.
  */
-export function orientOutward(mesh: MeshData): OrientResult {
+export function orientOutward(mesh: MeshData, options: OrientOptions = {}): OrientResult {
+  const alignOutward = options.alignOutward ?? true;
   const { positions, indices } = mesh;
   const V = positions.length / 3;
   const F = indices.length / 3;
@@ -132,6 +145,8 @@ export function orientOutward(mesh: MeshData): OrientResult {
         }
       }
     }
+
+    if (!alignOutward) continue;
 
     // 이 껍질의 부호 있는 부피가 음수면 통째로 뒤집는다.
     let shellVolume = 0;

@@ -110,32 +110,41 @@ export function runPipeline(input: MeshData, options: PipelineOptions = {}): Pip
 
   const welded = validateMesh(weldedMesh, { selfIntersectionLimit: options.selfIntersectionLimit });
 
+  // 테두리를 추적하기 전에 감는 방향부터 통일한다. 뒤집힌 면이 구멍에 닿아 있으면
+  // 그 지점에서 경계 진행 방향이 반전되어 테두리가 여러 조각으로 끊긴다.
+  const tOrientFirst = now();
+  const consistent = options.skipOrient
+    ? { mesh: weldedMesh, flippedTriangles: 0, conflicts: 0, invertedShells: 0, volume: 0 }
+    : orientOutward(weldedMesh, { alignOutward: false });
+  const orientFirstEnd = now();
+  const analysisMesh = consistent.mesh;
+
   const tAnalyze = now();
-  const topology = buildTopology(weldedMesh);
+  const topology = buildTopology(analysisMesh);
   const loops = traceBoundaryLoops(topology);
-  const bounds = computeBounds(weldedMesh.positions);
-  const metrics = classifyLoops(weldedMesh, loops, options, bounds);
+  const bounds = computeBounds(analysisMesh.positions);
+  const metrics = classifyLoops(analysisMesh, loops, options, bounds);
   const analyzeEnd = now();
 
   const upAxis = options.upAxis ?? DEFAULT_CLASSIFY_OPTIONS.upAxis;
   const upIndex = AXIS_INDEX[upAxis];
 
   const tCap = now();
-  const capTriangleStart = weldedMesh.indices.length / 3;
+  const capTriangleStart = analysisMesh.indices.length / 3;
 
   const extraPositions: number[] = [];
   const extraTriangles: number[] = [];
   const holes: HoleReport[] = [];
 
   if (!options.diagnoseOnly) {
-    const boundaryFaceLookup = buildBoundaryFaceLookup(topology, weldedMesh.positions.length / 3);
+    const boundaryFaceLookup = buildBoundaryFaceLookup(topology, analysisMesh.positions.length / 3);
 
     for (const metric of metrics) {
-      const baseVertexCount = weldedMesh.positions.length / 3 + extraPositions.length / 3;
-      const adjacentNormals = collectAdjacentNormals(weldedMesh, metric, boundaryFaceLookup);
+      const baseVertexCount = analysisMesh.positions.length / 3 + extraPositions.length / 3;
+      const adjacentNormals = collectAdjacentNormals(analysisMesh, metric, boundaryFaceLookup);
 
       const outcome = applyCap({
-        mesh: weldedMesh,
+        mesh: analysisMesh,
         metrics: metric,
         baseVertexCount,
         bounds,
@@ -157,17 +166,23 @@ export function runPipeline(input: MeshData, options: PipelineOptions = {}): Pip
   const capEnd = now();
 
   let repairedMesh: MeshData = {
-    positions: concatFloat32(weldedMesh.positions, extraPositions),
-    indices: concatUint32(weldedMesh.indices, extraTriangles),
+    positions: concatFloat32(analysisMesh.positions, extraPositions),
+    indices: concatUint32(analysisMesh.indices, extraTriangles),
   };
 
   const tOrient = now();
-  let orientSummary = { flippedTriangles: 0, invertedShells: 0, conflicts: 0 };
+  let orientSummary = {
+    flippedTriangles: consistent.flippedTriangles,
+    invertedShells: 0,
+    conflicts: consistent.conflicts,
+  };
+
   if (!options.skipOrient && !options.diagnoseOnly) {
+    // 이제 메시가 닫혔으므로 껍질별 부피 부호로 안팎을 가릴 수 있다.
     const oriented = orientOutward(repairedMesh);
     repairedMesh = oriented.mesh;
     orientSummary = {
-      flippedTriangles: oriented.flippedTriangles,
+      flippedTriangles: consistent.flippedTriangles + oriented.flippedTriangles,
       invertedShells: oriented.invertedShells,
       conflicts: oriented.conflicts,
     };
@@ -188,7 +203,9 @@ export function runPipeline(input: MeshData, options: PipelineOptions = {}): Pip
     weldedScore: scorePrintability(welded),
     repairedScore: scorePrintability(repaired),
     mesh: repairedMesh,
-    weldedMesh,
+    // 감는 방향을 통일한 쪽을 넘긴다. 형상은 그대로이고, 뒤집힌 면이 뷰어에서
+    // 후면 컬링으로 사라져 구멍처럼 보이는 오해를 막을 수 있다.
+    weldedMesh: analysisMesh,
     holes,
     capTriangleStart,
     weldSummary: {
@@ -204,7 +221,7 @@ export function runPipeline(input: MeshData, options: PipelineOptions = {}): Pip
       weld: weldEnd - tWeld,
       analyze: analyzeEnd - tAnalyze,
       cap: capEnd - tCap,
-      orient: orientEnd - tOrient,
+      orient: orientFirstEnd - tOrientFirst + (orientEnd - tOrient),
       validate: validateEnd - tValidate,
       total: validateEnd - t0,
     },
