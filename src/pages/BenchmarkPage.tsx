@@ -39,12 +39,12 @@ export function BenchmarkPage() {
         <header className="mb-10 max-w-[760px]">
           <div className="label-caps mb-3">정량 비교</div>
           <h1 className="text-[30px] leading-tight font-semibold tracking-[-0.02em] text-ink-100">
-            같은 모델을 네 단계로 처리해 어디서 무엇이 좋아지는지 분리합니다
+            같은 모델을 네 단계로 잘라, 점수가 어디서 오르는지 봅니다
           </h1>
           <p className="mt-4 text-[14px] leading-relaxed text-ink-300">
-            외부 도구와 결과만 견주면 왜 좋아졌는지 알 수 없습니다. 그래서 우리 파이프라인 자체를
-            한 단계씩 잘라내며 측정합니다. 정점 용접만으로 사라지는 결함, 구멍을 아무렇게나 메워도
-            해결되는 결함, 분류와 법선 정렬이 있어야만 넘어가는 결함이 각각 다르기 때문입니다.
+            다른 도구 결과만 놓고 비교하면 왜 올랐는지 안 보입니다. 그래서 우리 파이프라인을 한
+            단계씩 떼어 재 봤습니다. 용접만으로 사라지는 결함이 있고, 아무렇게나 메워도 되는 구멍이
+            있고, 분류와 법선 정렬이 있어야 넘어가는 것도 있습니다.
           </p>
         </header>
 
@@ -65,8 +65,8 @@ export function BenchmarkPage() {
         {!hasRealData && (
           <div className="mb-10 rounded-lg border border-amber-accent/25 bg-amber-accent/5 px-5 py-4">
             <p className="text-[13px] leading-relaxed text-ink-200">
-              아직 Meshy·Tripo 실측 데이터가 들어오지 않아 합성 대조군만 표시하고 있습니다. 아래
-              측정 패널에 두 서비스의 출력 파일을 넣으면 같은 기준으로 측정한 실측값으로 바뀝니다.
+              아직 Meshy·Tripo 실측이 없어서 합성 대조군만 보여 줍니다. 아래 패널에 두 서비스 파일을
+              넣으면 같은 기준으로 잰 숫자로 바뀝니다.
             </p>
           </div>
         )}

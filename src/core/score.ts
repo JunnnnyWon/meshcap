@@ -151,12 +151,12 @@ function toGrade(total: number): PrintabilityScore['grade'] {
 
 function toVerdict(total: number, report: ValidationReport): string {
   if (!report.watertight) {
-    return '경계가 열려 있어 슬라이서가 내부를 채우지 못합니다. 보정이 필요합니다.';
+    return '경계가 열려 있어 슬라이서가 속을 못 채웁니다. 보정이 필요합니다.';
   }
-  if (total >= 95) return '그대로 슬라이서에 넣어도 되는 상태입니다.';
-  if (total >= 85) return '출력에는 문제가 없지만 사소한 결함이 남아 있습니다.';
-  if (total >= 70) return '출력은 가능하나 결과물에 결함이 드러날 수 있습니다.';
-  return '슬라이서가 형상을 잘못 해석할 가능성이 높습니다.';
+  if (total >= 95) return '슬라이서에 그대로 넣어도 됩니다.';
+  if (total >= 85) return '출력은 되는데 자잘한 결함이 남습니다.';
+  if (total >= 70) return '출력은 되지만 결과물에 티가 날 수 있습니다.';
+  return '슬라이서가 모양을 잘못 잡을 가능성이 큽니다.';
 }
 
 function fmt(n: number): string {

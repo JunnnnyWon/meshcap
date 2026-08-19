@@ -6,15 +6,15 @@ export type VariantId = (typeof VARIANT_IDS)[number];
 export const VARIANT_LABEL: Record<VariantId, string> = {
   raw: '무처리',
   weldOnly: '용접만',
-  naiveFan: '순진한 부채꼴',
+  naiveFan: '그냥 부채꼴',
   meshcap: 'MeshCap',
 };
 
 export const VARIANT_DESCRIPTION: Record<VariantId, string> = {
-  raw: '내려받은 파일 그대로. 대부분의 슬라이서가 처음 만나는 상태다.',
-  weldOnly: '좌표가 같은 정점만 합친 상태. 여기서 줄어든 구멍은 애초에 없던 것이다.',
-  naiveFan: '남은 구멍을 전부 중심점 부채꼴로 메운다. 분류와 법선 정렬은 하지 않는다.',
-  meshcap: '분류에 따라 전략을 나눠 메우고 법선까지 정렬한 최종 결과.',
+  raw: '받은 파일 그대로. 슬라이서가 처음 받는 상태다.',
+  weldOnly: '좌표가 같은 정점만 합친 상태. 여기서 줄어든 구멍은 처음부터 없던 것이다.',
+  naiveFan: '남은 구멍을 전부 중심점 부채꼴로 메운다. 분류와 법선 정렬은 빼 둔다.',
+  meshcap: '구멍 종류에 따라 나눠 메우고 법선까지 맞춘 결과.',
 };
 
 export type ModelSource = 'meshy' | 'tripo' | 'synthetic';

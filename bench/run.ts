@@ -51,7 +51,7 @@ console.table(
     모델: m.label,
     '무처리 점수': m.variants.raw.score,
     '용접만': m.variants.weldOnly.score,
-    '순진한 부채꼴': m.variants.naiveFan.score,
+    '그냥 부채꼴': m.variants.naiveFan.score,
     MeshCap: m.variants.meshcap.score,
     // 정렬 전에는 뒤집힌 면의 둘레까지 구멍으로 잡힌다.
     '정렬 전 테두리': m.variants.weldOnly.holes,

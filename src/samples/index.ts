@@ -202,15 +202,15 @@ function buildWavyTube(): MeshData {
 export const SAMPLES: SampleModel[] = [
   {
     id: 'bust',
-    name: '결함 합성 회전체',
-    description: '바닥 개구부, 표면 구멍 3개, 쪼개진 정점, 뒤집힌 면을 모두 담은 예제',
+    name: '구멍 난 흉상',
+    description: '바닥이 뚫려 있고 표면에 구멍 세 개, 정점이 쪼개지고 면이 뒤집힌 예',
     upAxis: 'y',
     build: buildDefectiveBust,
   },
   {
     id: 'wavy',
-    name: '물결 개구부 튜브',
-    description: '테두리가 평면에서 크게 벗어나 Liepa 삼각화가 필요한 예제',
+    name: '물결 테두리 튜브',
+    description: '테두리가 물결쳐서 평면으로는 못 메우는 예',
     upAxis: 'y',
     build: buildWavyTube,
   },

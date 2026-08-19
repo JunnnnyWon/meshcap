@@ -63,7 +63,7 @@ export function App() {
           </nav>
 
           <div className="ml-auto flex items-center gap-4 shrink-0">
-            <span className="hidden lg:inline label-caps">원본 파일 미전송 · 연산 위치 선택</span>
+            <span className="hidden lg:inline label-caps">원본 파일은 안 올라갑니다</span>
             <a
               href={REPO_URL}
               target="_blank"

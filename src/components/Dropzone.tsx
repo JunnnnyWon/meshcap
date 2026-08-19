@@ -30,17 +30,16 @@ export function Dropzone({
     <div className="flex-1 grid-backdrop flex items-center justify-center px-6 py-14">
       <div className="w-full max-w-[880px]">
         <div className="mb-10 max-w-[620px]">
-          <div className="label-caps mb-4">3D AI 메시 진단 · 자동 보정</div>
+          <div className="label-caps mb-4">생성 메시 구멍 메우기</div>
           <h1 className="text-[38px] leading-[1.15] font-semibold tracking-[-0.02em] text-ink-100">
-            생성형 3D는 예쁘게 나옵니다.
+            미리보기에선 괜찮은데
             <br />
-            <span className="text-amber-accent">출력이 안 될 뿐입니다.</span>
+            <span className="text-amber-accent">겨드랑이와 바닥이 뚫려 있습니다.</span>
           </h1>
           <p className="mt-5 text-[14.5px] leading-relaxed text-ink-300">
-            Meshy와 Tripo가 만든 모델은 겨드랑이, 머리카락 사이, 바닥 개구부에 구멍이 남습니다.
-            슬라이서는 열린 메시의 안팎을 판정하지 못해 형상을 통째로 잘못 해석합니다. MeshCap은
-            구멍을 찾아 크기와 평면성, 방향에 따라 서로 다른 방식으로 메우고, 그 결과가 정말
-            출력 가능한 상태인지 점수로 알려줍니다.
+            Meshy나 Tripo로 뽑은 캐릭터를 슬라이서에 넣으면 겨드랑이, 머리카락 사이, 바닥이 열려
+            있는 경우가 많습니다. 슬라이서는 법선으로 안팎을 보기 때문에 속이 비어 버립니다.
+            파일을 넣으면 구멍을 나눠 메우고, 출력해도 되는지 100점으로 채점합니다.
           </p>
         </div>
 
@@ -94,14 +93,14 @@ export function Dropzone({
           </svg>
 
           <p className="text-[15px] text-ink-100 font-medium">
-            {busy ? '분석 중입니다' : '모델 파일을 여기에 놓으세요'}
+            {busy ? '분석하는 중' : '파일을 여기 놓거나 클릭해서 고르세요'}
           </p>
           <p className="mt-1.5 font-mono text-[11.5px] text-ink-400">
             GLB · GLTF · OBJ · STL · PLY
           </p>
           <p className="mt-4 text-[11.5px] text-ink-600 max-w-[420px] mx-auto leading-relaxed">
-            기본은 브라우저 안에서 처리합니다. 큰 모델은 팀 서버로 보낼 수 있는데, 그때도
-            좌표와 인덱스만 가고 원본 파일과 텍스처는 전송되지 않습니다.
+            기본은 이 브라우저에서 처리합니다. 큰 모델은 팀 서버로 보낼 수 있는데, 그때도
+            좌표와 인덱스만 가고 원본과 텍스처는 안 나갑니다.
           </p>
         </div>
 
@@ -115,7 +114,7 @@ export function Dropzone({
         )}
 
         <div className="mt-10">
-          <div className="label-caps mb-3">파일이 없다면 예제로 확인하세요</div>
+          <div className="label-caps mb-3">파일이 없으면 예제로 보세요</div>
           <div className="grid sm:grid-cols-2 gap-3">
             {SAMPLES.map((sample) => (
               <button

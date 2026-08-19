@@ -17,7 +17,7 @@ export const STRATEGY_REASON: Record<CapStrategy, string> = {
   planar: '테두리가 거의 평면이라 투영 후 삼각화했습니다',
   liepa: '테두리가 평면에서 벗어나 이면각을 최소화하며 채웠습니다',
   flatBase: '아래를 향한 큰 개구부라 평평한 접지면으로 마감했습니다',
-  skip: '테두리가 닫히지 않아 안전하게 메울 수 없습니다',
+  skip: '테두리가 안 닫혀서 억지로 메우지 않았습니다',
 };
 
 const STRATEGY_TONE: Record<CapStrategy, 'neutral' | 'patch' | 'amber' | 'flaw'> = {
@@ -43,7 +43,7 @@ export function HoleList({
       <section className="border-b border-ink-800 px-4 py-4">
         <h2 className="label-caps mb-2">구멍 목록</h2>
         <p className="text-[12px] text-ink-400 leading-relaxed">
-          용접 후 남은 구멍이 없습니다. 열린 것처럼 보였던 부분은 모두 쪼개진 정점 때문이었습니다.
+          용접하고 나니 남은 구멍이 없습니다. 열려 보였던 자리는 정점이 쪼개져 있던 탓입니다.
         </p>
       </section>
     );
