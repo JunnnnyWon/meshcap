@@ -28,7 +28,7 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-ink-950">
-      <header className="sticky top-0 z-40 border-b border-ink-800 bg-ink-950/85 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-ink-800 bg-ink-950/85 backdrop-blur-xl overflow-hidden">
         <div className="mx-auto max-w-[1600px] px-5 h-14 flex items-center gap-8">
           <button
             onClick={() => navigate('tool')}
@@ -40,20 +40,20 @@ export function App() {
             <span className="font-mono text-[15px] font-semibold tracking-[0.16em]">MESHCAP</span>
           </button>
 
-          <nav className="flex items-center gap-1 overflow-x-auto">
+          <nav className="flex items-center gap-1 min-w-0">
             {NAV.map((item) => {
               const active = route === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => navigate(item.id)}
-                  className={`group relative px-3.5 py-1.5 rounded-md text-[13px] whitespace-nowrap transition-colors ${
+                  className={`relative shrink-0 h-14 flex items-center px-3.5 text-[13px] whitespace-nowrap transition-colors ${
                     active ? 'text-ink-100' : 'text-ink-400 hover:text-ink-300'
                   }`}
                 >
                   {item.label}
                   <span
-                    className={`absolute inset-x-3 -bottom-[13px] h-px transition-colors ${
+                    className={`absolute inset-x-3 bottom-0 h-px ${
                       active ? 'bg-amber-accent' : 'bg-transparent'
                     }`}
                   />

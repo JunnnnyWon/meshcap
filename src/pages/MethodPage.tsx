@@ -1,14 +1,15 @@
 import type { ReactNode } from 'react';
 import rawResults from '../bench/results.json';
-import type { BenchmarkFile } from '../bench/schema.ts';
+import { VARIANT_LABEL, type BenchmarkFile } from '../bench/schema.ts';
 import { Badge } from '../components/ui.tsx';
 
 const data = rawResults as BenchmarkFile;
 const bust = data.models.find((m) => m.id === 'syn-bust');
 const splitOnly = data.models.find((m) => m.id === 'syn-split-only');
+const worst = data.models.find((m) => m.id === 'syn-worst');
 
 /** 분류기가 실제로 메운 구멍 수. 정렬 전 테두리 개수와 비교하기 위한 값이다. */
-const realHoles = (id: string): number => {
+const filledHoles = (id: string): number => {
   const model = data.models.find((m) => m.id === id);
   if (!model) return 0;
   return Object.values(model.strategyCounts).reduce((sum, n) => sum + n, 0);
@@ -17,22 +18,103 @@ const realHoles = (id: string): number => {
 export function MethodPage() {
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[820px] px-6 py-12">
-        <header className="mb-12">
-          <div className="label-caps mb-3">알고리즘</div>
-          <h1 className="text-[30px] leading-tight font-semibold tracking-[-0.02em] text-ink-100">
-            구멍을 찾는 것보다, 찾기 전에 무엇을 하느냐가 결과를 가릅니다
+      <article className="mx-auto max-w-[880px] px-6 py-12">
+        <header className="mb-10 pb-8 border-b border-ink-800">
+          <div className="label-caps mb-3">청강문화산업대학교 · 2026 청강 AI 크리에이티브 부스트</div>
+          <h1 className="text-[28px] leading-[1.3] font-semibold tracking-[-0.02em] text-ink-100">
+            MeshCap: 생성형 3D 메시의 경계 루프 복원과
+            <br />
+            출력 적합성 지향 구멍 메우기
           </h1>
-          <p className="mt-4 text-[14px] leading-relaxed text-ink-300">
-            메시에서 구멍을 찾는 일 자체는 어렵지 않습니다. 면 하나만 접한 에지를 모아 이으면
-            됩니다. 문제는 생성형 3D 출력물에서 그 정의가 곧바로 무너진다는 데 있습니다. 아래는
-            MeshCap이 순서를 이렇게 정한 이유입니다.
+          <p className="mt-5 text-[13.5px] leading-relaxed text-ink-300">
+            조원준<sup className="text-ink-500 text-[10px] ml-0.5">1</sup> · 박정훈
+            <sup className="text-ink-500 text-[10px] ml-0.5">1</sup> · 배윤서
+            <sup className="text-ink-500 text-[10px] ml-0.5">1</sup>
+          </p>
+          <p className="mt-1.5 text-[12px] text-ink-500">
+            <sup>1</sup>청강문화산업대학교 게임콘텐츠스쿨
+          </p>
+          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-400">
+            키워드: 구멍 메우기, 생성형 3D, 비다양체, half-edge, 3D 프린팅, 브라우저 기하 처리
           </p>
         </header>
 
-        <Pipeline />
+        <Section number="초록" title="Abstract">
+          <p>
+            생성형 3D 서비스가 내놓는 삼각형 메시는 화면에서는 닫혀 보이지만, 슬라이서가 요구하는
+            밀폐·다양체 조건을 자주 깨뜨린다. UV 이음매에서 정점이 중복되고, 면의 감는 방향이
+            뒤섞이며, 비다양체 에지에서 고전적인 경계 정의가 순회를 잃기 때문이다. 본 도구 MeshCap은
+            이 순서를 바꿉니다. 공간 해시 용접으로 거짓 경계를 없애고, 면 방위를 맞춘 뒤, 짝을 찾지
+            못한 half-edge만으로 닫힌 루프를 복원합니다. 구멍마다 둘레·평면성·방향을 재 부채꼴, 평면
+            투영, Liepa 동적계획, 바닥 받침 중 하나를 고르고, 밀폐·다양체·법선·관통을 100점으로
+            환산합니다. 코어는 three.js에 의존하지 않는 TypeScript라 브라우저 워커와 연산 서버가 같은
+            수치를 냅니다.
+          </p>
+          <p>
+            합성 절제에서 용접만으로 닫히는 구는 45점에서 100점이 되고, 뒤집힌 면이 섞인 회전체는
+            순진한 부채꼴이 {bust?.variants.naiveFan.score ?? 75}점에 머무는 동안 MeshCap이{' '}
+            {bust?.variants.meshcap.score ?? 100}점에 도달합니다. Meshy 출력 309만 삼각형은 브라우저에서
+            약 7초에 경계 에지 120개가 0개가 되어 94점에서 96점으로, Tripo 190만 삼각형은 97점에서
+            99점으로 올랐습니다. 표면을 닫으면 이미 면 셋이 공유하던 에지의 비다양체 정도가 커질 수
+            있으며, 채점에서 두 항목을 분리한 이유입니다.
+          </p>
+        </Section>
 
-        <Section number="01" title="정점 용접이 가장 먼저인 이유">
+        <Section number="1" title="서론">
+          <p>
+            텍스트나 이미지로 캐릭터를 뽑는 생성형 3D는 미리보기에는 충분합니다. FDM·SLA로 옮기는
+            순간이 다릅니다. 슬라이서는 법선으로 안팎을 가리므로, 겨드랑이·머리카락·바닥처럼 열린
+            자리의 내부를 채우지 못합니다. 상용 수리는 MeshLab, Instant Meshes, 클라우드 리토폴로지처럼
+            데스크톱 패키지나 서버에 묶여 있고, 생성 파이프라인 한가운데 넣기 어렵습니다.
+          </p>
+          <p>이 작업의 기여는 네 가지입니다.</p>
+          <ol className="list-decimal pl-5 space-y-2 text-ink-300">
+            <li>
+              생성형 메시에서 &ldquo;한 면만 접한 에지&rdquo;가 실패하는 지점을 보이고, 짝 없는
+              half-edge로 루프가 닫힘을 보장하는 정의를 씁니다.
+            </li>
+            <li>
+              용접 → 방위 → 탐지 → 분류 cap의 순서가 점수에 미치는 영향을 합성 절제로 분리합니다.
+              용접을 빼면 구멍이 없는 구도 경계 수천 개로 잡힙니다.
+            </li>
+            <li>
+              구멍 크기와 바닥 여부, 곡률에 따라 전략을 나누고, 슬라이서 실패 순서에 맞춘 100점
+              채점을 붙입니다.
+            </li>
+            <li>
+              같은 코어를 브라우저와 서버에서 돌려 Meshy 309만, Tripo 190만 삼각형 출력물에서 경계를
+              0으로 만듭니다.
+            </li>
+          </ol>
+        </Section>
+
+        <Section number="2" title="관련 연구">
+          <p>
+            구멍 메우기는 오래 다루어진 기하 처리입니다. Liepa는 경계의 모든 삼각화 가운데 이면각과
+            넓이를 사전식으로 최소화하는 동적계획을 제안했고, MeshCap의 곡면 구멍은 이 목적함수를
+            따릅니다 [1]. Barequet와 Sharir는 결손 영역을 최소 넓이 삼각화로 메웠고 [2], Attene의
+            MeshFix는 비다양체와 자기교차를 한꺼번에 고치는 데스크톱 수리기입니다 [3]. MeshLab은
+            이 계열 필터를 대화형으로 묶어 두었습니다 [4].
+          </p>
+          <p>
+            생성형 출력은 가정이 다릅니다. 정점이 UV 이음매에서 의도적으로 갈라져 있고, 면 방향이
+            일관되지 않으며, 비다양체 에지가 테두리 한가운데 놓입니다. 전처리를 건너뛴 채 Liepa만
+            돌리면 없는 구멍을 메우거나 순회가 끊깁니다. 브라우저에서 300만 삼각형을 다루려면 O(n³)
+            단계를 작은 루프에만 쓰고, 나머지는 선형에 가까운 용접·추적에 맡겨야 합니다. 평면 다각형은
+            earcut으로 삼각화합니다 [5]. Meshy와 Tripo는 비교 대상 메시의 출처이지, 이 도구가 호출하는
+            API가 아닙니다.
+          </p>
+        </Section>
+
+        <Section number="3" title="방법">
+          <p>
+            입력은 좌표 배열과 삼각형 인덱스뿐입니다. 텍스처·재질·원본 파일은 파이프라인에 들어오지
+            않습니다. 처리는 그림 1의 아홉 단계입니다.
+          </p>
+
+          <Pipeline />
+
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.1 정점 용접</h3>
           <p>
             생성형 서비스의 출력물은 UV seam과 머티리얼 경계마다 정점이 쪼개져 있습니다. 좌표는
             완전히 같은데 인덱스만 다릅니다. 이 상태에서 에지를 세면 이음매를 사이에 둔 두 면이
@@ -53,9 +135,8 @@ export function MethodPage() {
             모델의 실제 크기와 무관하게 같은 판정을 냅니다. 이 단계에서 미참조 정점, 면적이 0인
             삼각형, 완전히 겹친 중복 삼각형, NaN 좌표를 참조하는 삼각형도 함께 걷어냅니다.
           </p>
-        </Section>
 
-        <Section number="02" title="테두리를 복원하는 방법">
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.2 짝 없는 half-edge 루프</h3>
           <p>
             구멍의 테두리는 &ldquo;한 면만 접한 에지&rdquo;를 모으는 것으로 충분해 보입니다. 실제
             모델에서는 그렇지 않습니다. 면 셋이 한 에지를 공유하는 비다양체 지점이 있으면 그 에지는
@@ -75,9 +156,8 @@ export function MethodPage() {
             전부 끊긴 사슬로 잡혔습니다. 짝이 없는 half-edge를 기준으로 바꾸자 같은 모델의 테두리
             59개가 모두 닫혔습니다.
           </p>
-        </Section>
 
-        <Section number="03" title="법선 정렬이 구멍 탐지보다 먼저인 이유">
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.3 법선 정렬을 탐지보다 앞에 두는 이유</h3>
           <p>
             테두리를 짝 없는 half-edge로 정의하고 나면, 감는 방향이 뒤집힌 면이 곧바로 문제를
             일으킵니다. 뒤집힌 면은 자기 에지 세 개에서 방향 짝을 깨뜨립니다. 그 자리는 멀쩡히
@@ -91,7 +171,7 @@ export function MethodPage() {
             <Callout>
               대조군 <strong>{bust.label}</strong>에 뒤집힌 면을 섞어 두었습니다. 정렬하지 않으면
               테두리가 <Mono>{bust.variants.weldOnly.holes}개</Mono>로 잡히지만, 방향을 맞추고 나면
-              실제 구멍은 <Mono>{realHoles('syn-bust')}개</Mono>뿐입니다. 나머지는 전부 뒤집힌 면이
+              실제 구멍은 <Mono>{filledHoles('syn-bust')}개</Mono>뿐입니다. 나머지는 전부 뒤집힌 면이
               만든 허상입니다. 점수도 <Mono>{bust.variants.naiveFan.score}점</Mono>과{' '}
               <Mono>{bust.variants.meshcap.score}점</Mono>으로 갈립니다.
             </Callout>
@@ -102,9 +182,8 @@ export function MethodPage() {
             향하는지는 부호 있는 부피로 판정하므로 닫힌 뒤에야 의미가 있습니다. 그래서 전파는 앞에,
             바깥 방향 판정은 구멍을 다 메운 뒤에 둡니다.
           </p>
-        </Section>
 
-        <Section number="04" title="구멍을 분류하는 기준">
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.4 구멍 분류</h3>
           <p>
             모든 구멍을 같은 방법으로 메우면 반드시 어딘가가 망가집니다. 피규어 바닥의 큰 개구부를
             부채꼴로 메우면 가운데가 원뿔처럼 솟아 서포트가 붙고, 반대로 머리카락 사이의 작은 구멍을
@@ -156,9 +235,8 @@ export function MethodPage() {
             평면성은 테두리 정점이 최적 평면에서 벗어난 RMS 거리를, 둘레가 같은 원의 반지름으로 나눈
             무차원 값입니다. 모델의 크기나 단위와 무관하게 같은 기준으로 판정하기 위한 정규화입니다.
           </p>
-        </Section>
 
-        <Section number="05" title="네 가지 메우기 방식">
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.5 네 가지 메우기</h3>
           <div className="space-y-5">
             <Strategy name="부채꼴" tone="neutral">
               테두리 중심에 정점 하나를 두고 방사형으로 잇습니다. 가장 빠르지만 구멍이 커지면 중심점이
@@ -183,14 +261,15 @@ export function MethodPage() {
           </div>
           <p className="mt-5">
             어떤 전략이든 삼각형을 하나도 내놓지 못하면 부채꼴로 폴백합니다. 자기교차하는 테두리처럼
-            병적인 입력에서 품질을 조금 포기하더라도 구멍이 남는 것보다는 낫기 때문입니다.
+            병적인 입력에서 품질을 조금 포기하더라도 구멍이 남는 것보다는 낫기 때문입니다. 뚜껑이 새
+            틈을 남기면 루프 집합이 줄지 않을 때까지 최대 네 번 반복합니다.
           </p>
-        </Section>
 
-        <Section number="06" title="출력 적합성 채점">
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.6 출력 적합성 채점</h3>
           <p>
             배점은 슬라이서가 실제로 실패하는 순서를 따랐습니다. 경계 에지가 남으면 아예 슬라이싱이
-            되지 않으므로 가장 무겁고, 뒤로 갈수록 출력은 되지만 품질이 떨어지는 항목입니다.
+            되지 않으므로 가장 무겁고, 뒤로 갈수록 출력은 되지만 품질이 떨어지는 항목입니다. 한 항목에
+            결함이 있으면 그 항목은 만점을 받을 수 없습니다.
           </p>
           <div className="my-6 space-y-2">
             <ScoreRow label="완전 밀폐" points={35} note="열린 경계가 하나도 없는 상태" />
@@ -207,7 +286,136 @@ export function MethodPage() {
           </p>
         </Section>
 
-        <Section number="07" title="알려진 한계">
+        <Section number="4" title="실험">
+          <h3 className="text-[15px] font-medium text-ink-100 mb-3">4.1 합성 절제</h3>
+          <p>
+            네 변형을 같은 모델에 적용합니다. 원본, 용접만, 용접 후 모든 구멍을 부채꼴로 메운 것,
+            MeshCap 전체입니다. 점수가 용접에서 오르면 그 구멍은 애초에 없던 것이고, 부채꼴에서
+            멈추고 MeshCap에서만 만점이 되면 분류와 방위가 필요한 구멍입니다.
+          </p>
+
+          <div className="my-6 rounded-lg border border-ink-800 overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-ink-800 bg-ink-900/60">
+                  <th className="text-left font-normal text-ink-400 px-3 py-2.5">모델</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.raw}</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.weldOnly}</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.naiveFan}</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.meshcap}</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">밀폐</th>
+                </tr>
+              </thead>
+              <tbody className="text-ink-300">
+                {data.models.map((model) => (
+                  <tr key={model.id} className="border-b border-ink-800/60 last:border-0">
+                    <td className="px-3 py-2 align-top text-ink-100">
+                      {model.label}
+                      <div className="text-[11px] text-ink-500 mt-0.5">{model.concept}</div>
+                    </td>
+                    <td className="px-3 py-2 align-top text-right font-mono">
+                      {model.variants.raw.score}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right font-mono">
+                      {model.variants.weldOnly.score}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right font-mono">
+                      {model.variants.naiveFan.score}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right font-mono text-ink-100">
+                      {model.variants.meshcap.score}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right">
+                      {model.variants.meshcap.watertight ? '예' : '아니오'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            {splitOnly && (
+              <>
+                {splitOnly.label}은 용접만으로 만점입니다. 메운 구멍이 없습니다.{' '}
+              </>
+            )}
+            {bust && (
+              <>
+                {bust.label}은 용접 뒤에도 테두리 {bust.variants.weldOnly.holes}개가 남고, 부채꼴은{' '}
+                {bust.variants.naiveFan.score}점·비다양체 에지 {bust.variants.naiveFan.nonManifoldEdges}개로
+                끝납니다. MeshCap은 분류기 기준 {filledHoles('syn-bust')}개를 메워{' '}
+                {bust.variants.meshcap.score}점, 비다양체 0입니다.{' '}
+              </>
+            )}
+            {worst && (
+              <>
+                {worst.label}처럼 결함을 겹쳐 두면 MeshCap도 {worst.variants.meshcap.score}점에
+                머뭅니다. 밀폐는 되지만 비다양체 에지 {worst.variants.meshcap.nonManifoldEdges}개가
+                남습니다.
+              </>
+            )}
+          </p>
+
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">4.2 서비스 출력물</h3>
+          <p>
+            같은 코어를 브라우저 워커에서 Meshy·Tripo STL에 적용했습니다. 원본 파일은 전송하지
+            않았습니다. 아래 수치는 이 도구로 측정한 값입니다.
+          </p>
+
+          <div className="my-6 rounded-lg border border-ink-800 overflow-hidden">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="border-b border-ink-800 bg-ink-900/60">
+                  <th className="text-left font-normal text-ink-400 px-4 py-2.5" />
+                  <th className="text-left font-normal text-ink-400 px-4 py-2.5">Meshy</th>
+                  <th className="text-left font-normal text-ink-400 px-4 py-2.5">Tripo</th>
+                </tr>
+              </thead>
+              <tbody className="text-ink-300">
+                <tr className="border-b border-ink-800/60">
+                  <td className="px-4 py-2">삼각형</td>
+                  <td className="px-4 py-2 font-mono">3,092,042</td>
+                  <td className="px-4 py-2 font-mono">1,896,054</td>
+                </tr>
+                <tr className="border-b border-ink-800/60">
+                  <td className="px-4 py-2">파일</td>
+                  <td className="px-4 py-2 font-mono">147 MB</td>
+                  <td className="px-4 py-2 font-mono">90 MB</td>
+                </tr>
+                <tr className="border-b border-ink-800/60">
+                  <td className="px-4 py-2">점수</td>
+                  <td className="px-4 py-2 font-mono">94 → 96</td>
+                  <td className="px-4 py-2 font-mono">97 → 99</td>
+                </tr>
+                <tr className="border-b border-ink-800/60">
+                  <td className="px-4 py-2">경계 에지</td>
+                  <td className="px-4 py-2 font-mono">120 → 0</td>
+                  <td className="px-4 py-2 font-mono">14 → 0</td>
+                </tr>
+                <tr className="border-b border-ink-800/60">
+                  <td className="px-4 py-2">밀폐</td>
+                  <td className="px-4 py-2">watertight</td>
+                  <td className="px-4 py-2">watertight</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-2">브라우저</td>
+                  <td className="px-4 py-2 font-mono">약 7초</td>
+                  <td className="px-4 py-2 font-mono">약 4–10초</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            두 모델 모두 밀폐됩니다. 만점이 아닌 것은 정직하게 남깁니다. Tripo 쪽은 구멍을 메운 뒤
+            비다양체 에지가 9개에서 90개로 늘었습니다. 면 셋이 이미 공유하던 자리에 네 번째 면을
+            붙인 결과입니다. 표면을 닫는 일과 다양체로 만드는 일을 맞바꾼 것이고, 채점에서 두 항목을
+            갈라 둔 이유입니다.
+          </p>
+        </Section>
+
+        <Section number="5" title="한계와 결론">
           <ul className="space-y-2.5 list-none pl-0">
             <Limitation>
               테두리가 한 정점에서 여러 갈래로 갈라지면 어느 갈래를 먼저 따라가느냐에 따라 구멍이
@@ -216,9 +424,7 @@ export function MethodPage() {
             </Limitation>
             <Limitation>
               면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙어 비다양체가 더 심해집니다.
-              표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈이고, 두 항목을 채점에서 따로 두는
-              이유이기도 합니다. 실제 Tripo 출력물에서 비다양체 에지가 9개에서 90개로 늘었지만
-              경계는 14개에서 0개가 되었습니다.
+              표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈입니다.
             </Limitation>
             <Limitation>
               겹쳐 있는 이중 표면은 같은 자리에 테두리가 두 벌 잡히고 뚜껑도 두 겹으로 생깁니다.
@@ -234,11 +440,44 @@ export function MethodPage() {
             </Limitation>
             <Limitation>
               Liepa 삼각화는 정점 250개를 넘는 테두리에서 평면 투영으로 넘어갑니다. O(n³)이라 그
-              이상에서는 브라우저가 눈에 띄게 멈추기 때문입니다.
+              이상에서는 브라우저가 눈에 띄게 멈추기 때문입니다. 삼각형 300만 개 규모에서는 처리에
+              약 7초, 메모리 1.4GB가 필요합니다.
             </Limitation>
           </ul>
+          <p className="mt-6">
+            생성형 메시의 출력 실패는 구멍 메우기 한 가지로 설명되지 않습니다. 이음매 정점, 뒤집힌
+            면, 비다양체 지점이 탐지 자체를 속입니다. MeshCap은 그 전처리를 파이프라인 앞에 두고,
+            남은 구멍만 분류해 메웁니다. 브라우저에서 서비스 출력물을 닫을 수 있음을 보였고, 닫는
+            대가로 다양체가 나빠질 수 있음을 점수에 그대로 남깁니다.
+          </p>
         </Section>
-      </div>
+
+        <Section number="참고문헌" title="References">
+          <ol className="list-decimal pl-5 space-y-2.5 text-[12.5px] leading-relaxed text-ink-400">
+            <li>
+              P. Liepa, &ldquo;Filling Holes in Meshes,&rdquo; in <em>Proc. Eurographics/ACM
+              SIGGRAPH Symp. Geometry Processing</em>, 2003.
+            </li>
+            <li>
+              G. Barequet and M. Sharir, &ldquo;Filling gaps in the boundary of a polyhedron,&rdquo;{' '}
+              <em>Comput. Aided Geom. Des.</em>, vol. 12, no. 2, 1995.
+            </li>
+            <li>
+              M. Attene, &ldquo;A lightweight approach to repairing digitized polygon meshes,&rdquo;{' '}
+              <em>The Visual Computer</em>, vol. 26, 2010.
+            </li>
+            <li>
+              P. Cignoni, M. Callieri, M. Corsini, M. Dellepiane, F. Ganovelli, and G. Ranzuglia,
+              &ldquo;MeshLab: an Open-Source Mesh Processing Tool,&rdquo; in <em>Eurographics Italian
+              Chapter Conf.</em>, 2008.
+            </li>
+            <li>
+              Mapbox, &ldquo;earcut: Fast, memory-efficient triangulation library,&rdquo; GitHub
+              repository.
+            </li>
+          </ol>
+        </Section>
+      </article>
     </div>
   );
 }
@@ -254,8 +493,8 @@ function Pipeline() {
   ];
 
   return (
-    <div className="mb-14 rounded-xl border border-ink-800 bg-ink-900/40 p-6">
-      <div className="label-caps mb-5">처리 순서</div>
+    <div className="my-8 rounded-xl border border-ink-800 bg-ink-900/40 p-6">
+      <div className="label-caps mb-5">그림 1. 처리 순서</div>
 
       <div className="space-y-0">
         {stages.map((stage, index) => (

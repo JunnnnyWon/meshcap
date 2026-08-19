@@ -268,16 +268,18 @@ export function ToolPage() {
           resetNonce={resetNonce}
         />
 
-        <div className="absolute top-4 left-4 flex items-center gap-2 flex-wrap">
-          <SegmentedControl
-            options={[
-              { id: 'before', label: '보정 전' },
-              { id: 'after', label: '보정 후' },
-            ]}
-            value={mode}
-            onChange={setMode}
-          />
-          <div className="inline-flex rounded-md border border-ink-700 bg-ink-900/80 backdrop-blur p-0.5">
+        <div className="absolute top-4 left-4 flex items-center gap-2 pointer-events-none">
+          <div className="pointer-events-auto">
+            <SegmentedControl
+              options={[
+                { id: 'before', label: '보정 전' },
+                { id: 'after', label: '보정 후' },
+              ]}
+              value={mode}
+              onChange={setMode}
+            />
+          </div>
+          <div className="pointer-events-auto inline-flex rounded-md border border-ink-700 bg-ink-900/80 backdrop-blur p-0.5">
             <button
               type="button"
               onClick={() => setWireframe(!wireframe)}
@@ -288,21 +290,23 @@ export function ToolPage() {
               와이어프레임
             </button>
           </div>
-          <Button variant="outline" onClick={() => setResetNonce((n) => n + 1)} className="bg-ink-900/80 backdrop-blur">
-            시점 초기화
-          </Button>
+          <div className="pointer-events-auto">
+            <Button variant="outline" onClick={() => setResetNonce((n) => n + 1)} className="bg-ink-900/80 backdrop-blur">
+              시점 초기화
+            </Button>
+          </div>
         </div>
 
         {mode === 'before' && result && result.holes.length > 0 && (
-          <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2">
+          <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2 pointer-events-none">
             <LegendDot color="#ff4d4f" label="구멍 테두리" />
-            <LegendDot color="#9aa4b2" label="기존 표면" />
+            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '표면 에지' : '기존 표면'} />
           </div>
         )}
         {mode === 'after' && result && result.capTriangleStart < result.repaired.triangleCount && (
-          <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2">
-            <LegendDot color="#22d3ee" label="새로 만든 면" />
-            <LegendDot color="#9aa4b2" label="기존 표면" />
+          <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2 pointer-events-none">
+            <LegendDot color="#5eead4" label={wireframe ? '캡 에지' : '새로 만든 면'} />
+            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '표면 에지' : '기존 표면'} />
           </div>
         )}
 

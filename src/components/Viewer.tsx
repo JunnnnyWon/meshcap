@@ -66,7 +66,7 @@ export function Viewer({
     }
   }, [resetNonce, input]);
 
-  return <canvas ref={canvasRef} className="block w-full h-full outline-none" />;
+  return <canvas ref={canvasRef} className="block w-full h-full outline-none touch-none" />;
 }
 
 function boundsOf(input: ViewerMeshInput) {

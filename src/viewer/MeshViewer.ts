@@ -9,8 +9,10 @@ import {
   HemisphereLight,
   LineBasicMaterial,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   Vector2,
   Vector3,
@@ -30,8 +32,12 @@ const COLOR_SURFACE = 0x9aa4b2;
 const COLOR_CAP = 0x22d3ee;
 const COLOR_HOLE = 0xff4d4f;
 const COLOR_HOLE_ACTIVE = 0xffd166;
+const COLOR_WIRE_SURFACE = 0xe8eef6;
+const COLOR_WIRE_CAP = 0x5eead4;
 
 const AXIS_INDEX: Record<UpAxis, number> = { x: 0, y: 1, z: 2 };
+const Y_UP = new Vector3(0, 1, 0);
+const OFFSET_LOCAL = new Vector3(0.62, 0.5, 0.88).normalize();
 
 export interface ViewerMeshInput {
   before: MeshData;
@@ -52,14 +58,19 @@ export class MeshViewer {
 
   private beforeMesh: Mesh | null = null;
   private afterMesh: Mesh | null = null;
+  private beforeWire: Mesh | null = null;
+  private afterWire: Mesh | null = null;
   private holeLines: LineSegments2 | null = null;
   private grid: GridHelper | null = null;
 
   private surfaceMaterial: MeshStandardMaterial;
   private capMaterial: MeshStandardMaterial;
+  private surfaceWireMaterial: MeshBasicMaterial;
+  private capWireMaterial: MeshBasicMaterial;
   private holeMaterial: LineMaterial;
 
   private mode: ViewMode = 'before';
+  private wireframe = false;
   private radius = 1;
   private disposed = false;
 
@@ -67,6 +78,8 @@ export class MeshViewer {
     null;
 
   constructor(private canvas: HTMLCanvasElement) {
+    canvas.style.touchAction = 'none';
+
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(new Color(0x0d0f13), 1);
@@ -80,7 +93,11 @@ export class MeshViewer {
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.rotateSpeed = 0.85;
+    this.controls.rotateSpeed = 1.05;
+    this.controls.screenSpacePanning = true;
+    this.controls.minPolarAngle = 0.08;
+    this.controls.maxPolarAngle = Math.PI - 0.08;
+    canvas.addEventListener('pointerdown', this.cancelFlight);
 
     this.scene.add(new HemisphereLight(0xdfe7f5, 0x141920, 1.1));
     this.scene.add(new AmbientLight(0xffffff, 0.25));
@@ -111,6 +128,24 @@ export class MeshViewer {
       emissive: new Color(0x0b3b45),
       flatShading: true,
     });
+    // Standard 재질의 wireframe는 조명에 의존해 어두운 배경에서 검게 보인다.
+    // 같은 geometry를 무조명 선으로 한 번 더 그려 삼각형 경계를 읽히게 한다.
+    this.surfaceWireMaterial = new MeshBasicMaterial({
+      color: COLOR_WIRE_SURFACE,
+      wireframe: true,
+      depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+    this.capWireMaterial = new MeshBasicMaterial({
+      color: COLOR_WIRE_CAP,
+      wireframe: true,
+      depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
     // WebGL의 기본 선은 굵기를 1픽셀 넘게 줄 수 없어 큰 모델에서 테두리가 거의 보이지 않는다.
     // 구멍을 찾는 것이 이 도구의 핵심이므로 화면 공간 굵기를 지원하는 재질을 쓴다.
     // depthTest를 끈 것은 모델 뒤에 숨은 구멍도 찾을 수 있어야 하기 때문이다.
@@ -134,9 +169,14 @@ export class MeshViewer {
     const up = new Vector3();
     up.setComponent(AXIS_INDEX[input.upAxis], 1);
     this.camera.up.copy(up);
+    this.controls.update();
 
-    this.beforeMesh = new Mesh(toGeometry(input.before), this.surfaceMaterial);
+    const beforeGeometry = toGeometry(input.before);
+    this.beforeMesh = new Mesh(beforeGeometry, this.surfaceMaterial);
+    this.beforeWire = new Mesh(beforeGeometry, this.surfaceWireMaterial);
+    this.beforeWire.renderOrder = 2;
     this.content.add(this.beforeMesh);
+    this.content.add(this.beforeWire);
 
     const afterGeometry = toGeometry(input.after);
     const capStartIndex = input.capTriangleStart * 3;
@@ -145,7 +185,10 @@ export class MeshViewer {
     afterGeometry.addGroup(capStartIndex, input.after.indices.length - capStartIndex, 1);
 
     this.afterMesh = new Mesh(afterGeometry, [this.surfaceMaterial, this.capMaterial]);
+    this.afterWire = new Mesh(afterGeometry, [this.surfaceWireMaterial, this.capWireMaterial]);
+    this.afterWire.renderOrder = 2;
     this.content.add(this.afterMesh);
+    this.content.add(this.afterWire);
 
     this.holeLines = buildLoopLines(input.before, input.loops, this.holeMaterial);
     if (this.holeLines) this.content.add(this.holeLines);
@@ -153,21 +196,24 @@ export class MeshViewer {
     this.grid = buildBedGrid(bounds, AXIS_INDEX[input.upAxis]);
     this.scene.add(this.grid);
 
-    this.setMode(this.mode);
+    this.syncVisibility();
     this.frameAll(bounds.center, bounds.diagonal);
   }
 
   setMode(mode: ViewMode): void {
     this.mode = mode;
-    if (this.beforeMesh) this.beforeMesh.visible = mode === 'before';
-    if (this.afterMesh) this.afterMesh.visible = mode === 'after';
-    // 보정 후에는 테두리가 사라졌음을 보여주기 위해 선을 감춘다.
-    if (this.holeLines) this.holeLines.visible = mode === 'before';
+    this.syncVisibility();
   }
 
   setWireframe(enabled: boolean): void {
-    this.surfaceMaterial.wireframe = enabled;
-    this.capMaterial.wireframe = enabled;
+    this.wireframe = enabled;
+    this.surfaceMaterial.transparent = enabled;
+    this.surfaceMaterial.opacity = enabled ? 0.16 : 1;
+    this.surfaceMaterial.depthWrite = !enabled;
+    this.capMaterial.transparent = enabled;
+    this.capMaterial.opacity = enabled ? 0.22 : 1;
+    this.capMaterial.depthWrite = !enabled;
+    this.syncVisibility();
   }
 
   setHolesVisible(visible: boolean): void {
@@ -178,9 +224,7 @@ export class MeshViewer {
   focusPoint(point: [number, number, number], approach: [number, number, number], spread: number): void {
     const target = new Vector3(point[0], point[1], point[2]);
     const distance = Math.max(spread * 2.6, this.radius * 0.28);
-    const direction = new Vector3(approach[0], approach[1], approach[2]);
-    if (direction.lengthSq() < 1e-12) direction.set(0.6, 0.5, 0.8);
-    direction.normalize();
+    const direction = this.safeEyeDirection(new Vector3(approach[0], approach[1], approach[2]));
 
     this.flight = {
       from: this.camera.position.clone(),
@@ -201,7 +245,7 @@ export class MeshViewer {
 
     this.flight = {
       from: this.camera.position.clone(),
-      to: target.clone().add(new Vector3(0.62, 0.5, 0.88).normalize().multiplyScalar(distance)),
+      to: target.clone().add(this.eyeOffset(distance)),
       targetFrom: this.controls.target.clone(),
       targetTo: target,
       t: 0,
@@ -223,18 +267,59 @@ export class MeshViewer {
 
   dispose(): void {
     this.disposed = true;
+    this.canvas.removeEventListener('pointerdown', this.cancelFlight);
     this.clearContent();
     this.controls.dispose();
     this.surfaceMaterial.dispose();
     this.capMaterial.dispose();
+    this.surfaceWireMaterial.dispose();
+    this.capWireMaterial.dispose();
     this.holeMaterial.dispose();
     this.renderer.dispose();
   }
 
+  private cancelFlight = (): void => {
+    this.flight = null;
+  };
+
+  /** Y-up 기준 시점을 현재 camera.up 프레임으로 돌려 극점에 붙지 않게 한다. */
+  private eyeOffset(distance: number): Vector3 {
+    const quat = new Quaternion().setFromUnitVectors(Y_UP, this.camera.up.clone().normalize());
+    return OFFSET_LOCAL.clone().applyQuaternion(quat).multiplyScalar(distance);
+  }
+
+  private safeEyeDirection(direction: Vector3): Vector3 {
+    if (direction.lengthSq() < 1e-12) {
+      return this.eyeOffset(1);
+    }
+    direction.normalize();
+    const up = this.camera.up;
+    if (Math.abs(direction.dot(up)) > 0.92) {
+      const side = new Vector3().crossVectors(up, new Vector3(1, 0, 0));
+      if (side.lengthSq() < 1e-8) side.crossVectors(up, new Vector3(0, 1, 0));
+      direction.addScaledVector(side.normalize(), 0.35).normalize();
+    }
+    return direction;
+  }
+
+  private syncVisibility(): void {
+    const before = this.mode === 'before';
+    if (this.beforeMesh) this.beforeMesh.visible = before;
+    if (this.afterMesh) this.afterMesh.visible = !before;
+    if (this.beforeWire) this.beforeWire.visible = before && this.wireframe;
+    if (this.afterWire) this.afterWire.visible = !before && this.wireframe;
+    if (this.holeLines) this.holeLines.visible = before;
+  }
+
   private clearContent(): void {
+    const geometries = new Set<BufferGeometry>();
     for (const child of [...this.content.children]) {
       this.content.remove(child);
-      disposeObject(child as Mesh | LineSegments2);
+      const mesh = child as Mesh | LineSegments2;
+      if (mesh.geometry && !geometries.has(mesh.geometry as BufferGeometry)) {
+        geometries.add(mesh.geometry as BufferGeometry);
+        mesh.geometry.dispose();
+      }
     }
     if (this.grid) {
       this.scene.remove(this.grid);
@@ -243,6 +328,8 @@ export class MeshViewer {
     }
     this.beforeMesh = null;
     this.afterMesh = null;
+    this.beforeWire = null;
+    this.afterWire = null;
     this.holeLines = null;
   }
 
@@ -326,8 +413,4 @@ function buildBedGrid(bounds: ReturnType<typeof computeBounds>, upIndex: number)
   return grid;
 }
 
-function disposeObject(object: Mesh | LineSegments2): void {
-  object.geometry?.dispose();
-}
-
-export { COLOR_CAP, COLOR_HOLE, COLOR_HOLE_ACTIVE, COLOR_SURFACE };
+export { COLOR_CAP, COLOR_HOLE, COLOR_HOLE_ACTIVE, COLOR_SURFACE, COLOR_WIRE_CAP, COLOR_WIRE_SURFACE };
