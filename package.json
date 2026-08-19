@@ -2,7 +2,7 @@
   "name": "meshcap",
   "version": "0.1.0",
   "private": true,
-  "description": "3D AI 생성 메시의 구멍을 자동 탐지·분류·Cap하는 브라우저 전용 도구",
+  "description": "생성형 3D 메시의 구멍을 찾아 메우고 출력 적합성을 채점하는 브라우저 도구",
   "type": "module",
   "scripts": {
     "dev": "vite",
