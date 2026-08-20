@@ -12,16 +12,16 @@ export const VARIANT_LABEL: Record<VariantId, string> = {
 
 export const VARIANT_DESCRIPTION: Record<VariantId, string> = {
   raw: '받은 파일 그대로. 슬라이서가 처음 받는 상태다.',
-  weldOnly: '좌표가 같은 정점만 합친 상태. 여기서 줄어든 구멍은 처음부터 없던 것이다.',
-  naiveFan: '남은 구멍을 전부 중심점 부채꼴로 메운다. 분류와 법선 정렬은 빼 둔다.',
-  meshcap: '구멍 종류에 따라 나눠 메우고 법선까지 맞춘 결과.',
+  weldOnly: '위치가 같은 점만 합친 상태. 여기서 줄어든 구멍은 처음부터 없던 것이다.',
+  naiveFan: '남은 구멍을 전부 가운데에서 부채꼴로 메운다. 구멍 종류와 면 방향은 빼 둔다.',
+  meshcap: '구멍 종류에 따라 나눠 메우고 면 방향까지 맞춘 결과.',
 };
 
 export type ModelSource = 'meshy' | 'tripo' | 'synthetic';
 
 export const SOURCE_LABEL: Record<ModelSource, string> = {
-  meshy: 'Meshy AI',
-  tripo: 'Tripo AI',
+  meshy: '3D AI A',
+  tripo: '3D AI B',
   synthetic: '합성 대조군',
 };
 

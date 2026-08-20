@@ -43,8 +43,8 @@ export function BenchmarkPage() {
           </h1>
           <p className="mt-4 text-[14px] leading-relaxed text-ink-300">
             다른 도구 결과만 놓고 비교하면 왜 올랐는지 안 보입니다. 그래서 우리 파이프라인을 한
-            단계씩 떼어 재 봤습니다. 용접만으로 사라지는 결함이 있고, 아무렇게나 메워도 되는 구멍이
-            있고, 분류와 법선 정렬이 있어야 넘어가는 것도 있습니다.
+            단계씩 떼어 재 봤습니다. 용접만으로 사라지는 결함도 있고, 아무렇게나 메워도 되는 구멍도
+            있습니다. 구멍 종류를 나누고 면 방향을 맞춰야 넘어가는 것도 있습니다.
           </p>
         </header>
 
@@ -65,7 +65,7 @@ export function BenchmarkPage() {
         {!hasRealData && (
           <div className="mb-10 rounded-lg border border-amber-accent/25 bg-amber-accent/5 px-5 py-4">
             <p className="text-[13px] leading-relaxed text-ink-200">
-              아직 Meshy·Tripo 실측이 없어서 합성 대조군만 보여 줍니다. 아래 패널에 두 서비스 파일을
+              아직 3D AI 실측이 없어서 합성 대조군만 보여 줍니다. 아래 패널에 3D AI 파일을
               넣으면 같은 기준으로 잰 숫자로 바뀝니다.
             </p>
           </div>
@@ -131,11 +131,11 @@ function ModelDetail({ model }: { model: ModelBenchmark }) {
   const rows: { label: string; key: keyof ModelBenchmark['variants']['raw']; unit?: string }[] = [
     { label: '삼각형', key: 'triangles' },
     { label: '추가된 삼각형', key: 'addedTriangles' },
-    { label: '경계 에지', key: 'boundaryEdges' },
+    { label: '열린 모서리', key: 'boundaryEdges' },
     { label: '구멍', key: 'holes' },
-    { label: '비다양체 에지', key: 'nonManifoldEdges' },
-    { label: '방향 불일치 에지', key: 'inconsistentEdges' },
-    { label: '연결 요소', key: 'components' },
+    { label: '겹친 모서리', key: 'nonManifoldEdges' },
+    { label: '방향이 엇갈린 모서리', key: 'inconsistentEdges' },
+    { label: '떨어진 덩어리', key: 'components' },
     { label: '처리 시간', key: 'elapsedMs', unit: 'ms' },
   ];
 

@@ -1,6 +1,6 @@
 import type { MeshData } from '../core/types.ts';
 import type { UpAxis } from '../core/classify.ts';
-import { SAMPLES } from '../samples/index.ts';
+import { proceduralSample } from '../samples/index.ts';
 
 export interface SyntheticBenchModel {
   id: string;
@@ -51,7 +51,7 @@ function rng(seed: number): () => number {
   };
 }
 
-/** 표면 곳곳에 작은 구멍을 흩뿌린다. 머리카락 사이나 겨드랑이 결함을 흉내 낸다. */
+/** 표면 곳곳에 작은 구멍을 흩뿌린다. 헤어 간극이나 액와 개구 결함을 흉내 낸다. */
 function scatterHoles(mesh: MeshData, count: number, radius: number, seed: number): MeshData {
   const random = rng(seed);
   const { positions, indices } = mesh;
@@ -109,8 +109,8 @@ function flipEvery(mesh: MeshData, step: number): MeshData {
   return { positions: mesh.positions, indices };
 }
 
-const bust = SAMPLES.find((s) => s.id === 'bust');
-const wavy = SAMPLES.find((s) => s.id === 'wavy');
+const bust = proceduralSample('bust');
+const wavy = proceduralSample('wavy');
 
 /**
  * 난이도를 단계별로 올린 대조군.
@@ -139,14 +139,14 @@ export const SYNTHETIC_BENCH_MODELS: SyntheticBenchModel[] = [
     label: '결함 합성 회전체',
     concept: '난이도 중',
     upAxis: 'y',
-    build: () => bust!.build(),
+    build: () => bust.build(),
   },
   {
     id: 'syn-wavy',
-    label: '물결 개구부 튜브',
+    label: '물결 테두리 튜브',
     concept: '난이도 상',
     upAxis: 'y',
-    build: () => wavy!.build(),
+    build: () => wavy.build(),
   },
   {
     id: 'syn-worst',

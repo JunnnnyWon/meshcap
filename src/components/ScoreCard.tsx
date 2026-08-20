@@ -13,7 +13,7 @@ export function ScoreCard({ before, after }: { before: PrintabilityScore; after:
 
   return (
     <section className="border-b border-ink-800 px-4 py-4">
-      <h2 className="label-caps mb-3">출력 적합성</h2>
+      <h2 className="label-caps mb-3">출력해도 되는지</h2>
 
       <div className="flex items-end gap-4 mb-4">
         <div>

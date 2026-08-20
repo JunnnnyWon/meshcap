@@ -13,6 +13,7 @@ RUN npm ci
 COPY tsconfig.json vite.config.ts index.html ./
 COPY bench ./bench
 COPY src ./src
+COPY public ./public
 
 # 타입 검사와 단위 테스트를 통과해야 이미지가 만들어진다.
 RUN npm test && npm run build

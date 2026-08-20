@@ -19,8 +19,7 @@ const TEAM = [
 ];
 
 const AI_TOOLS = [
-  { name: 'Tripo3D', usage: '비교용 3D 모델 생성' },
-  { name: 'Meshy AI', usage: '비교용 3D 모델 생성' },
+  { name: '3D AI', usage: '비교용 3D 모델 생성' },
   { name: 'ChatGPT · Claude', usage: '설계 초안, 알고리즘 점검, 실험 기록' },
   { name: 'Stable Diffusion · Midjourney', usage: '생성에 넣을 콘셉트 이미지' },
   { name: 'RunyourAI · Gcube', usage: 'GPU에서 생성 돌려 보기' },
@@ -29,7 +28,7 @@ const AI_TOOLS = [
 const STACK = [
   { name: 'TypeScript', usage: '알고리즘 코어 전체' },
   { name: 'three.js', usage: '파일 로드와 3D 뷰어' },
-  { name: 'earcut', usage: '평면 다각형 삼각화' },
+  { name: 'earcut', usage: '평면을 삼각형으로 나누기' },
   { name: 'React · Vite · Tailwind', usage: '인터페이스' },
   { name: 'Vitest', usage: '코어 알고리즘 단위 테스트' },
 ];
@@ -44,8 +43,8 @@ export function AboutPage() {
             3D AI 메시 최적화 및 피규어 제작
           </h1>
           <p className="mt-4 text-[14px] leading-relaxed text-ink-300">
-            청강문화산업대학교 게임콘텐츠스쿨에서 셋이 만든 도구입니다. 생성형 3D로 뽑은 캐릭터를
-            출력해 보면, 거의 매번 메시가 막혀 있습니다. 그 구멍을 손으로 고치는 시간을 줄이려고
+            청강문화산업대학교 게임콘텐츠스쿨에서 셋이 만든 도구입니다. 생성형 3D 캐릭터를
+            출력하면 거의 매번 구멍이 남아 있습니다. 그 구멍을 손으로 고치는 시간을 줄이려고
             만들었습니다.
           </p>
           <p className="mt-3 text-[14px] leading-relaxed text-ink-300">
@@ -86,8 +85,8 @@ export function AboutPage() {
             ))}
           </div>
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-400">
-            콘셉트와 초안 정리에 AI를 썼습니다. 메시 처리 코드는 위상 자료구조부터 삼각화까지 직접
-            짰고, 테스트로 확인합니다. 커밋 로그에 그 과정이 남아 있습니다.
+            콘셉트와 초안 정리에 AI를 썼습니다. 메시를 읽고 구멍을 메우는 코드는 직접 짰고,
+            테스트로 확인합니다. 커밋 로그에 그 과정이 남아 있습니다.
           </p>
         </Section>
 

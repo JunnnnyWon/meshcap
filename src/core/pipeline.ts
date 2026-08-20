@@ -104,12 +104,12 @@ export type PipelineStage =
 
 export const STAGE_LABEL: Record<PipelineStage, string> = {
   diagnose: '원본 상태를 재는 중',
-  weld: '겹친 정점을 합치는 중',
+  weld: '겹친 점을 합치는 중',
   orient: '면의 방향을 맞추는 중',
   analyze: '구멍을 찾는 중',
   cap: '구멍을 메우는 중',
   finalize: '바깥 방향을 맞추는 중',
-  validate: '결과를 검증하는 중',
+  validate: '점수를 매기는 중',
 };
 
 const AXIS_INDEX = { x: 0, y: 1, z: 2 } as const;

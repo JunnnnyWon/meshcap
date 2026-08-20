@@ -125,7 +125,7 @@ export function ToolPage() {
               if (progress.phase === 'upload') {
                 setStatus(`서버로 보내는 중 ${Math.round((progress.uploaded ?? 0) * 100)}%`);
               } else if (progress.phase === 'compute') {
-                setStatus('연산 서버가 처리하는 중');
+                setStatus('계산 서버가 처리하는 중');
               } else {
                 setStatus('결과를 받는 중');
               }
@@ -135,18 +135,18 @@ export function ToolPage() {
             // 서버가 죽어 있어도 도구는 계속 쓸 수 있어야 한다.
             if (token !== runToken.current) return;
             setNotice(
-              `${serverError instanceof Error ? serverError.message : '연산 서버 오류'} 브라우저에서 대신 처리했습니다.`,
+              `${serverError instanceof Error ? serverError.message : '계산 서버 오류'} 브라우저에서 대신 처리했습니다.`,
             );
             outcome = await runLocally();
           }
         } else {
           if (tooBigToSend) {
             setNotice(
-              `보낼 기하가 ${(payloadBytes / 1024 / 1024).toFixed(0)}MB로 전송 한계 ` +
+              `보낼 크기가 ${(payloadBytes / 1024 / 1024).toFixed(0)}MB로 전송 한계 ` +
                 `${(limitBytes / 1024 / 1024).toFixed(0)}MB를 넘어 브라우저에서 처리했습니다.`,
             );
           } else if (preference === 'server' && !server) {
-            setNotice('연산 서버에 연결할 수 없어 브라우저에서 처리했습니다.');
+            setNotice('계산 서버에 연결할 수 없어 브라우저에서 처리했습니다.');
           }
           outcome = await runLocally();
         }
@@ -158,7 +158,7 @@ export function ToolPage() {
         setSelectedHole(null);
       } catch (err) {
         if (token !== runToken.current) return;
-        setError(err instanceof Error ? err.message : '메시를 처리하지 못했습니다.');
+        setError(err instanceof Error ? err.message : '모델을 처리하지 못했습니다.');
         setResult(null);
         setUsedEngine(null);
       } finally {
@@ -172,11 +172,12 @@ export function ToolPage() {
   );
 
   const handleFile = useCallback(
-    async (file: File) => {
+    async (file: File, axis?: UpAxis) => {
       setBusy(true);
       setError(null);
       try {
         const loaded = await loadMeshFromFile(file);
+        const usedAxis = axis ?? loaded.suggestedUpAxis;
         setSource({
           mesh: loaded.mesh,
           name: loaded.fileName,
@@ -184,11 +185,12 @@ export function ToolPage() {
           partCount: loaded.partCount,
           origin: 'file',
         });
-        setUpAxis(loaded.suggestedUpAxis);
-        await analyze(loaded.mesh, loaded.suggestedUpAxis, flatBase, engine, serverInfo);
+        setUpAxis(usedAxis);
+        await analyze(loaded.mesh, usedAxis, flatBase, engine, serverInfo);
       } catch (err) {
         setError(err instanceof Error ? err.message : '파일을 읽지 못했습니다.');
         setBusy(false);
+        setStatus(null);
       }
     },
     [analyze, flatBase, engine, serverInfo],
@@ -196,6 +198,28 @@ export function ToolPage() {
 
   const handleSample = useCallback(
     async (sample: SampleModel) => {
+      if (sample.url && sample.fileName) {
+        setBusy(true);
+        setStatus('예제를 불러오는 중');
+        setError(null);
+        try {
+          const response = await fetch(sample.url);
+          if (!response.ok) throw new Error('예제 파일을 불러오지 못했습니다.');
+          const file = new File([await response.arrayBuffer()], sample.fileName);
+          await handleFile(file, sample.upAxis);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : '예제를 불러오지 못했습니다.');
+          setBusy(false);
+          setStatus(null);
+        }
+        return;
+      }
+
+      if (!sample.build) {
+        setError('이 예제를 만들 수 없습니다.');
+        return;
+      }
+
       const mesh = sample.build();
       setSource({
         mesh,
@@ -207,7 +231,7 @@ export function ToolPage() {
       setUpAxis(sample.upAxis);
       await analyze(mesh, sample.upAxis, flatBase, engine, serverInfo);
     },
-    [analyze, flatBase, engine, serverInfo],
+    [analyze, flatBase, engine, handleFile, serverInfo],
   );
 
   const reanalyze = useCallback(
@@ -300,13 +324,13 @@ export function ToolPage() {
         {mode === 'before' && result && result.holes.length > 0 && (
           <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2 pointer-events-none">
             <LegendDot color="#ff4d4f" label="구멍 테두리" />
-            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '표면 에지' : '기존 표면'} />
+            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '원래 면의 선' : '기존 표면'} />
           </div>
         )}
         {mode === 'after' && result && result.capTriangleStart < result.repaired.triangleCount && (
           <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2 pointer-events-none">
-            <LegendDot color="#5eead4" label={wireframe ? '캡 에지' : '새로 만든 면'} />
-            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '표면 에지' : '기존 표면'} />
+            <LegendDot color="#5eead4" label={wireframe ? '메운 면의 선' : '새로 만든 면'} />
+            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '원래 면의 선' : '기존 표면'} />
           </div>
         )}
 
@@ -335,7 +359,7 @@ export function ToolPage() {
             </div>
             <div className="font-mono text-[11px] text-ink-400 mt-0.5">
               {formatBytes(source.byteSize)} · 삼각형 {triangleCount(source.mesh).toLocaleString('ko-KR')}
-              {source.partCount > 1 && ` · 서브메시 ${source.partCount}개`}
+              {source.partCount > 1 && ` · 덩어리 ${source.partCount}개`}
             </div>
           </div>
           <Button variant="ghost" onClick={handleReset}>
@@ -377,7 +401,7 @@ export function ToolPage() {
 
         <section className="px-4 py-3 border-b border-ink-800">
           <div className="flex items-center justify-between gap-3 mb-2">
-            <span className="label-caps">연산 위치</span>
+            <span className="label-caps">계산 위치</span>
             {usedEngine && (
               <Badge tone={usedEngine === 'server' ? 'patch' : 'neutral'}>
                 {usedEngine === 'server' ? '서버에서 처리됨' : '브라우저에서 처리됨'}
@@ -389,7 +413,7 @@ export function ToolPage() {
             options={[
               { id: 'auto', label: '자동' },
               { id: 'browser', label: '브라우저' },
-              { id: 'server', label: '연산 서버' },
+                { id: 'server', label: '계산 서버' },
             ]}
             value={engine}
             onChange={(next) => {
@@ -405,7 +429,7 @@ export function ToolPage() {
                 ? '좌표와 인덱스만 팀 서버로 보냅니다. 텍스처와 원본 파일은 안 갑니다.'
                 : serverInfo
                   ? '모델이 크고 이 기기 메모리나 코어가 빠듯할 때만 서버로 보냅니다. 서버가 더 빠른 건 아니라서, 여유 있으면 브라우저에서 끝내는 편이 낫습니다.'
-                  : '연산 서버에 연결되지 않아 브라우저에서만 돌립니다.'}
+                  : '계산 서버에 연결되지 않아 브라우저에서만 돌립니다.'}
           </p>
 
           {serverInfo && (

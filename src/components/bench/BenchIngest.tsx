@@ -86,10 +86,10 @@ export function BenchIngest({ existing }: { existing: ModelBenchmark[] }) {
     <section className="rounded-xl border border-ink-800 bg-ink-900/40 p-6">
       <h2 className="text-[15px] font-medium text-ink-100 mb-1.5">측정 데이터 만들기</h2>
       <p className="text-[12.5px] leading-relaxed text-ink-400 mb-5 max-w-[720px]">
-        Meshy·Tripo에서 받은 파일을 넣으면 위 표와 같은 네 단계로 잽니다. 측정은 브라우저에서
+        3D AI에서 받은 파일을 넣으면 위 표와 같은 네 단계로 잽니다. 측정은 브라우저에서
         끝나고, 결과 JSON만 받아 저장소의{' '}
         <code className="font-mono text-[11.5px] text-ink-300">src/bench/results.json</code>에 덮어쓰면
-        이 페이지 숫자가 바뀝니다. 파일 이름에 meshy나 tripo를 넣어 두면 출처를 알아서 붙입니다.
+        이 페이지 숫자가 바뀝니다. 출처는 측정 뒤에 직접 고를 수 있습니다.
       </p>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -145,8 +145,8 @@ export function BenchIngest({ existing }: { existing: ModelBenchmark[] }) {
                 }}
                 className="bg-ink-850 border border-ink-700 rounded px-2 py-1 text-[12px] text-ink-100 outline-none"
               >
-                <option value="meshy">Meshy AI</option>
-                <option value="tripo">Tripo AI</option>
+                <option value="meshy">3D AI A</option>
+                <option value="tripo">3D AI B</option>
                 <option value="synthetic">합성 대조군</option>
               </select>
 

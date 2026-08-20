@@ -6,9 +6,9 @@ import {
   encodeRepairResponse,
 } from '../protocol.ts';
 import { runPipeline } from '../../core/pipeline.ts';
-import { SAMPLES } from '../../samples/index.ts';
+import { proceduralSample } from '../../samples/index.ts';
 
-const sample = SAMPLES[0];
+const sample = proceduralSample('bust');
 
 describe('연산 서버 프로토콜', () => {
   it('요청을 왕복해도 기하가 그대로다', () => {

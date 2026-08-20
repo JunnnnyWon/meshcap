@@ -6,7 +6,7 @@ import { AboutPage } from './pages/AboutPage.tsx';
 
 const NAV: { id: Route; label: string; sub: string }[] = [
   { id: 'tool', label: '진단 · 보정', sub: 'Tool' },
-  { id: 'benchmark', label: '벤치마크', sub: 'Meshy vs Tripo' },
+  { id: 'benchmark', label: '벤치마크', sub: '3D AI 비교' },
   { id: 'method', label: '알고리즘', sub: 'Method' },
   { id: 'about', label: '프로젝트', sub: 'About' },
 ];

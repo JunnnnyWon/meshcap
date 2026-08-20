@@ -93,7 +93,7 @@ officecli batch "$FILE" --commands "$(cat <<JSON
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"1.2 핵심 발견","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"첫째, 생성형 출력물에서 눈에 보이는 구멍의 상당수는 실제 구멍이 아닙니다. UV 이음매마다 정점이 쪼개져 있어 멀쩡히 붙은 자리가 경계로 잡힙니다. 대조군 가운데 실제로는 닫혀 있는 모델 하나는 용접 전 경계 에지가 ${SPLIT_RAW_EDGES}개로 집계되어 ${SPLIT_RAW}점이었지만, 좌표가 같은 정점을 합치는 것만으로 ${SPLIT_WELD}점이 되었습니다. 이 구간에서 메운 구멍은 하나도 없습니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"둘째, 구멍의 테두리를 무엇으로 정의하느냐가 실제 모델에서 성패를 가릅니다. 흔히 쓰는 정의인 \u0027한 면만 접한 에지\u0027로는 면 셋이 한 에지를 공유하는 비다양체 지점에서 순회가 끊깁니다. 실제 Meshy 출력물 하나에서 비다양체 에지 93개 때문에 경계 정점 178개 중 117개의 차수가 어긋났고, 테두리가 전부 끊긴 사슬로 잡혀 한 곳도 메울 수 없었습니다. 기준을 \u0027반대 방향 짝을 찾지 못한 half-edge\u0027로 바꾸자 같은 모델의 테두리 59개가 모두 닫혔습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"둘째, 구멍의 테두리를 무엇으로 정의하느냐가 실제 모델에서 성패를 가릅니다. 흔히 쓰는 정의인 \u0027한 면만 접한 에지\u0027로는 면 셋이 한 에지를 공유하는 비다양체 지점에서 순회가 끊깁니다. 실제 3D AI 출력물 하나에서 비다양체 에지 93개 때문에 경계 정점 178개 중 117개의 차수가 어긋났고, 테두리가 전부 끊긴 사슬로 잡혀 한 곳도 메울 수 없었습니다. 기준을 \u0027반대 방향 짝을 찾지 못한 half-edge\u0027로 바꾸자 같은 모델의 테두리 59개가 모두 닫혔습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"셋째, 처리 순서가 결과를 가릅니다. 감는 방향이 뒤집힌 면은 자기 에지 세 개의 방향 짝을 깨뜨리므로, 멀쩡히 막혀 있는 자리에 짝 없는 half-edge를 남깁니다. 탐지기 눈에는 구멍으로 보이고, 그대로 메우면 막힌 표면 위에 없는 면이 덧붙습니다. 대조군에서 정렬 전에는 테두리가 ${BUST_PRE_HOLES}개로 잡히지만 방향을 맞추고 나면 실제 구멍은 ${BUST_REAL_HOLES}개뿐이었습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"넷째, 모든 구멍을 같은 방법으로 메우면 안 됩니다. 피규어 바닥의 큰 개구부를 중심점 부채꼴로 메우면 가운데가 원뿔처럼 솟아 서포트가 붙고, 반대로 표면의 작은 구멍을 평면으로 메우면 바깥으로 튀어나옵니다. 크기와 평면성, 방향을 먼저 재고 전략을 나누는 것이 이 도구의 핵심 기여입니다.","size":"11pt","spaceAfter":"8pt"}},
 
@@ -155,7 +155,7 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"3. 선행 조사","style":"Heading1","size":"20pt","bold":"true","pageBreakBefore":"true","spaceAfter":"12pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"3.1 생성 서비스의 출력 특성","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"Meshy와 Tripo는 모두 이미지 또는 텍스트에서 텍스처가 입혀진 메시를 만들어 줍니다. 두 서비스 모두 결과물을 GLB로 내려주며, 텍스처를 위한 UV 전개가 포함되어 있습니다. UV 전개는 표면을 평면으로 펴는 과정이라 반드시 이음매가 생기고, 이음매를 사이에 둔 정점은 서로 다른 UV 좌표를 가져야 하므로 같은 위치에 정점이 둘 이상 놓입니다. 렌더링에는 아무 문제가 없지만 위상 분석에는 치명적입니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"3D AI는 이미지 또는 텍스트에서 텍스처가 입혀진 메시를 만들어 줍니다. 결과물은 GLB로 내려주며, 텍스처를 위한 UV 전개가 포함되어 있습니다. UV 전개는 표면을 평면으로 펴는 과정이라 반드시 이음매가 생기고, 이음매를 사이에 둔 정점은 서로 다른 UV 좌표를 가져야 하므로 같은 위치에 정점이 둘 이상 놓입니다. 렌더링에는 아무 문제가 없지만 위상 분석에는 치명적입니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 서비스는 또한 리메시 옵션과 사각형 기반 토폴로지 옵션을 제공합니다. 다만 이 옵션들은 표면을 다시 짜는 것이지 열린 경계를 닫아 주지는 않습니다. 특히 모델 아래쪽은 입력 이미지에 정보가 없는 경우가 많아 생성 단계에서부터 비어 있게 되며, 리메시를 거쳐도 비어 있는 상태 그대로 유지됩니다.","size":"11pt","spaceAfter":"8pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"3.2 기존 수리 도구","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
@@ -232,9 +232,9 @@ officecli batch "$FILE" --commands "$(cat <<JSON
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.3 테두리를 무엇으로 정의할 것인가","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"구멍의 테두리는 한 면만 접한 에지를 모아 이으면 된다고 보는 것이 보통입니다. 합성 대조군에서는 이 정의로 충분했지만, 실제 서비스 출력물에 적용하자 곧바로 무너졌습니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"문제는 면 셋이 한 에지를 공유하는 비다양체 지점입니다. 그런 에지는 접한 면이 셋이므로 어느 정의로도 경계가 아니지만, 테두리를 따라가던 순회는 바로 그 자리에서 다음으로 갈 에지를 찾지 못합니다. 삼백만 삼각형짜리 Meshy 출력물에서 비다양체 에지 93개 때문에 경계 정점 178개 중 117개의 진입 차수와 진출 차수가 어긋났고, 테두리 전부가 끊긴 사슬로 잡혀 한 곳도 메울 수 없었습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"문제는 면 셋이 한 에지를 공유하는 비다양체 지점입니다. 그런 에지는 접한 면이 셋이므로 어느 정의로도 경계가 아니지만, 테두리를 따라가던 순회는 바로 그 자리에서 다음으로 갈 에지를 찾지 못합니다. 삼백만 삼각형짜리 3D AI 출력물에서 비다양체 에지 93개 때문에 경계 정점 178개 중 117개의 진입 차수와 진출 차수가 어긋났고, 테두리 전부가 끊긴 사슬로 잡혀 한 곳도 메울 수 없었습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"기준을 바꿔 반대 방향 짝을 찾지 못하고 남은 half-edge를 모으면 이 문제가 정의상 사라집니다. 삼각형 하나는 세 방향 에지가 순환을 이루므로 각 정점에 진입 하나와 진출 하나를 줍니다. 따라서 전체 half-edge 집합은 모든 정점에서 차수가 균형을 이룹니다. 어떤 에지에서 반대 방향끼리 짝을 지우면 양 끝 정점의 진입과 진출이 똑같은 수만큼 줄어들므로 균형이 그대로 유지됩니다. 균형 잡힌 유향 그래프는 반드시 서로소인 순환들로 분해되므로, 남은 half-edge를 모으면 순회가 어디서도 끊기지 않습니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"같은 Meshy 모델의 테두리 59개가 이 기준에서는 모두 닫혔고 경계 에지 120개가 0개가 되었습니다. 대신 비다양체 에지가 93개에서 95개로 늘었습니다. 면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙기 때문입니다. 표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈이고, 채점에서 두 항목을 따로 둔 이유이기도 합니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"같은 3D AI 모델의 테두리 59개가 이 기준에서는 모두 닫혔고 경계 에지 120개가 0개가 되었습니다. 대신 비다양체 에지가 93개에서 95개로 늘었습니다. 면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙기 때문입니다. 표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈이고, 채점에서 두 항목을 따로 둔 이유이기도 합니다.","size":"11pt","spaceAfter":"8pt"}},
 
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"5.4 법선 정렬이 먼저여야 하는 이유","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"테두리를 짝 없는 half-edge로 정의하고 나면 감는 방향이 곧바로 문제가 됩니다. 뒤집힌 면은 자기 에지 세 개에서 방향 짝을 깨뜨립니다. 그 자리는 멀쩡히 막혀 있는데도 짝을 찾지 못한 half-edge가 남으므로 탐지기 눈에는 구멍으로 보입니다.","size":"11pt","spaceAfter":"8pt"}},
@@ -414,7 +414,7 @@ add_figure "$FIG/07-benchmark.png" "그림 6. 웹 벤치마크 페이지. 실제
 
 officecli batch "$FILE" --commands "$(cat <<'JSON'
 [
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"6.5 Meshy와 Tripo 실측","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"6.5 3D AI 실측","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 서비스의 실제 출력물 비교는 동일한 콘셉트 세 종을 양쪽에서 생성해 같은 네 단계로 측정하는 방식으로 진행합니다. 콘셉트는 난이도를 나누어 정합니다. 하나는 로봇이나 헬멧처럼 표면이 단순한 무기물, 하나는 의복이 있는 인간형, 하나는 머리카락과 얇은 장신구가 있는 캐릭터입니다. 얇고 복잡한 구조일수록 생성 단계에서 면이 누락되기 쉬우므로 두 서비스의 차이가 드러나는 지점이기도 합니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"측정은 웹 벤치마크 페이지의 측정 패널에서 수행합니다. node 스크립트 대신 브라우저를 쓰는 이유는 두 가지입니다. 서비스가 내려주는 GLB는 Draco로 압축되어 있고 텍스처가 포함되어 있어 서버 환경에서 로더를 그대로 쓰기 어렵고, 무엇보다 사용자가 화면에서 보는 것과 동일한 경로로 측정해야 리포트의 숫자와 도구의 숫자가 어긋나지 않기 때문입니다. 측정 결과는 JSON으로 내려받아 저장소에 반영하면 벤치마크 페이지에 그대로 나타납니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"콘셉트 세 종의 체계적인 비교는 2026년 8월 20일 생성분으로 채웁니다. 다만 알고리즘 검증을 위해 두 서비스의 출력물을 각각 한 점씩 미리 받아 돌려 보았고, 그 결과가 아래입니다. 합성 대조군에서는 드러나지 않던 문제가 여기서 나왔기 때문에 5.3절의 설계 변경으로 이어졌습니다.","size":"11pt","spaceAfter":"10pt"}}
@@ -424,7 +424,7 @@ JSON
 
 officecli add "$FILE" /body --type table --prop rows=8 --prop cols=3 --prop width=100%
 TBL=6
-officecli set "$FILE" "/body/tbl[$TBL]/tr[1]" --prop header=true --prop c1="지표" --prop c2="Meshy 출력물" --prop c3="Tripo 출력물"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[1]" --prop header=true --prop c1="지표" --prop c2="3D AI A 출력물" --prop c3="3D AI B 출력물"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[2]" --prop c1="파일 크기" --prop c2="147 MB" --prop c3="90 MB"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[3]" --prop c1="삼각형" --prop c2="3,092,042" --prop c3="1,896,054"
 officecli set "$FILE" "/body/tbl[$TBL]/tr[4]" --prop c1="용접으로 병합된 정점" --prop c2="7,731,317 (83%)" --prop c3="4,740,187 (83%)"
@@ -452,7 +452,7 @@ officecli add "$FILE" /body --type paragraph --prop text="표 6. 실제 서비�
 
 officecli batch "$FILE" --commands "$(cat <<'JSON'
 [
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 모델 모두 완전 밀폐에 도달했지만, 비다양체 에지가 늘어난 폭이 크게 다릅니다. Tripo 출력물에서는 정점 42개짜리 테두리 두 개가 같은 자리에 겹쳐 잡혔는데, 표면이 이중으로 겹쳐 있는 지점이라 뚜껑도 두 겹으로 생겼습니다. 입력 자체의 병리이며 현재는 감지해 점수에 반영할 뿐 자동으로 정리하지는 않습니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 모델 모두 완전 밀폐에 도달했지만, 비다양체 에지가 늘어난 폭이 크게 다릅니다. 3D AI B 출력물에서는 정점 42개짜리 테두리 두 개가 같은 자리에 겹쳐 잡혔는데, 표면이 이중으로 겹쳐 있는 지점이라 뚜껑도 두 겹으로 생겼습니다. 입력 자체의 병리이며 현재는 감지해 점수에 반영할 뿐 자동으로 정리하지는 않습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"두 파일 모두 브라우저에서 처리했고 워커가 중단되지 않았습니다. 다만 삼백만 삼각형 규모에서는 최대 메모리가 1.4기가바이트에 이르므로, 저사양 기기에서는 모델을 단순화한 뒤 사용하는 편이 안전합니다.","size":"11pt","spaceAfter":"8pt"}}
 ]
 JSON
@@ -514,7 +514,7 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"8.1 알려진 한계","style":"Heading2","size":"14pt","bold":"true","spaceBefore":"14pt","spaceAfter":"6pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"테두리가 한 정점에서 여러 갈래로 갈라지면 어느 갈래를 먼저 따라가느냐에 따라 구멍이 나뉘는 모양이 달라집니다. 순회가 반드시 닫히고 전체를 빠짐없이 덮는다는 점은 보장되지만 분할 결과가 유일하지는 않습니다. 갈래를 고를 때 정점 주변의 기하를 참고하면 개선할 수 있습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙어 비다양체가 더 심해집니다. 표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈입니다. 슬라이서 대부분이 비다양체보다 열린 경계에서 먼저 실패하므로 이 교환은 의도한 것이지만, 근본적으로는 비다양체 지점을 먼저 분리해 다양체로 만든 뒤 메우는 편이 낫습니다.","size":"11pt","spaceAfter":"8pt"}},
-{"command":"add","parent":"/body","type":"paragraph","props":{"text":"겹쳐 있는 이중 표면은 같은 자리에 테두리가 두 벌 잡히고 뚜껑도 두 겹으로 생깁니다. 실제 Tripo 출력물에서 정점 42개짜리 테두리가 같은 위치에 두 개 잡히는 사례를 확인했습니다. 입력 자체의 병리라 현재는 감지해 점수에만 반영합니다.","size":"11pt","spaceAfter":"8pt"}},
+{"command":"add","parent":"/body","type":"paragraph","props":{"text":"겹쳐 있는 이중 표면은 같은 자리에 테두리가 두 벌 잡히고 뚜껑도 두 겹으로 생깁니다. 실제 3D AI B 출력물에서 정점 42개짜리 테두리가 같은 위치에 두 개 잡히는 사례를 확인했습니다. 입력 자체의 병리라 현재는 감지해 점수에만 반영합니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"삼백만 삼각형 규모에서는 처리에 약 7초, 최대 메모리 1.4기가바이트가 필요합니다. 자료구조를 전부 타입 배열로 다시 쓰면서 초기 구현 대비 시간은 3분의 1, 메모리는 3분의 2로 줄였지만, 저사양 기기에서는 여전히 부담입니다. 모델을 단순화하는 단계를 도구 안에 넣는 것이 다음 과제입니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"바닥 받침은 테두리를 수직으로 내리는 방식이라, 투영된 테두리가 스스로 겹치는 심하게 오목한 개구부에서는 옆벽이 서로 교차할 수 있습니다. 현재는 관통 검사로 이를 감지해 점수에 반영할 뿐 자동으로 해소하지는 않습니다.","size":"11pt","spaceAfter":"8pt"}},
 {"command":"add","parent":"/body","type":"paragraph","props":{"text":"벽 두께는 검사하지 않습니다. 밀폐된 메시라도 벽이 노즐 지름보다 얇으면 FDM에서 출력되지 않습니다. 이 판정에는 내부 거리장 계산이 필요해 현재 범위 밖에 두었고 슬라이서에 맡깁니다.","size":"11pt","spaceAfter":"8pt"}},
@@ -531,20 +531,19 @@ officecli batch "$FILE" --commands "$(cat <<'JSON'
 JSON
 )"
 
-officecli add "$FILE" /body --type table --prop rows=6 --prop cols=2 --prop width=100%
+officecli add "$FILE" /body --type table --prop rows=5 --prop cols=2 --prop width=100%
 TBL=8
 officecli set "$FILE" "/body/tbl[$TBL]/tr[1]" --prop header=true --prop c1="도구" --prop c2="활용 방식"
-officecli set "$FILE" "/body/tbl[$TBL]/tr[2]" --prop c1="Tripo3D" --prop c2="비교 대상 3D 모델 생성 및 출력 특성 관찰"
-officecli set "$FILE" "/body/tbl[$TBL]/tr[3]" --prop c1="Meshy AI" --prop c2="비교 대상 3D 모델 생성 및 출력 특성 관찰"
-officecli set "$FILE" "/body/tbl[$TBL]/tr[4]" --prop c1="ChatGPT · Claude" --prop c2="연구 설계 검토, 알고리즘 문헌 조사, 실험 기록 정리, 코드 리뷰"
-officecli set "$FILE" "/body/tbl[$TBL]/tr[5]" --prop c1="Stable Diffusion · Midjourney" --prop c2="3D 생성 입력으로 쓸 콘셉트 이미지 제작"
-officecli set "$FILE" "/body/tbl[$TBL]/tr[6]" --prop c1="RunyourAI · Gcube" --prop c2="후원받은 GPU 환경에서 생성 워크플로 실험"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[2]" --prop c1="3D AI" --prop c2="비교 대상 3D 모델 생성 및 출력 특성 관찰"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[3]" --prop c1="ChatGPT · Claude" --prop c2="연구 설계 검토, 알고리즘 문헌 조사, 실험 기록 정리, 코드 리뷰"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[4]" --prop c1="Stable Diffusion · Midjourney" --prop c2="3D 생성 입력으로 쓸 콘셉트 이미지 제작"
+officecli set "$FILE" "/body/tbl[$TBL]/tr[5]" --prop c1="RunyourAI · Gcube" --prop c2="후원받은 GPU 환경에서 생성 워크플로 실험"
 
 for col in 1 2; do
   officecli set "$FILE" "/body/tbl[$TBL]/tr[1]/tc[$col]" --prop fill=1F3A5F
   officecli set "$FILE" "/body/tbl[$TBL]/tr[1]/tc[$col]/p[1]/r[1]" --prop bold=true --prop color=FFFFFF --prop size=10.5pt
 done
-for row in $(seq 2 6); do for col in 1 2; do
+for row in $(seq 2 5); do for col in 1 2; do
   officecli set "$FILE" "/body/tbl[$TBL]/tr[$row]/tc[$col]/p[1]/r[1]" --prop size=10.5pt
 done; done
 for row in 3 5; do for col in 1 2; do

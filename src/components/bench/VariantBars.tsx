@@ -40,7 +40,7 @@ export function VariantBars({ model }: { model: ModelBenchmark }) {
             </span>
 
             <span className="w-14 shrink-0 text-right font-mono text-[10.5px] text-ink-600">
-              {metrics.watertight ? '밀폐' : `구멍 ${metrics.holes}`}
+              {metrics.watertight ? '막힘' : `구멍 ${metrics.holes}`}
             </span>
           </div>
         );

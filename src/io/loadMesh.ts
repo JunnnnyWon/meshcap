@@ -38,7 +38,7 @@ export function detectFormat(fileName: string): MeshFormat | null {
 let dracoLoader: DRACOLoader | null = null;
 
 /**
- * Meshy와 Tripo가 내려주는 GLB는 Draco로 압축된 경우가 흔하다.
+ * 3D AI가 내려주는 GLB는 Draco로 압축된 경우가 흔하다.
  *
  * setDecoderPath를 부르지 않는 것이 의도한 동작이다. three가 디코더 경로를
  * import.meta.url로 잡아두어 번들러가 디코더를 함께 배포하므로, CDN에 붙지 않고도

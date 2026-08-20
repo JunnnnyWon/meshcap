@@ -32,13 +32,13 @@ export function scorePrintability(report: ValidationReport): PrintabilityScore {
   items.push(
     gradeItem({
       id: 'watertight',
-      label: '완전 밀폐',
+      label: '구멍이 막혔는지',
       max: 35,
       ok: report.boundaryEdgeCount === 0,
       // 전체 에지의 5%가 경계면 0점이 되도록 기울기를 잡았다.
       ratio: report.boundaryEdgeCount / Math.max(1, report.edgeCount * 0.05),
-      okDetail: '열린 경계가 없습니다',
-      failDetail: `경계 에지 ${fmt(report.boundaryEdgeCount)}개, 구멍 ${fmt(report.boundaryLoopCount)}개`,
+      okDetail: '열린 구멍이 없습니다',
+      failDetail: `열린 모서리 ${fmt(report.boundaryEdgeCount)}개, 구멍 ${fmt(report.boundaryLoopCount)}개`,
     }),
   );
 
@@ -46,37 +46,37 @@ export function scorePrintability(report: ValidationReport): PrintabilityScore {
   items.push(
     gradeItem({
       id: 'manifold',
-      label: '다양체 위상',
+      label: '모서리가 깨끗한지',
       max: 25,
       ok: nonManifold === 0,
       ratio: nonManifold / Math.max(1, report.edgeCount * 0.01),
-      okDetail: '세 면 이상 만나는 에지가 없습니다',
-      failDetail: `비다양체 에지 ${fmt(report.nonManifoldEdgeCount)}개, 정점 ${fmt(report.nonManifoldVertexCount)}개`,
+      okDetail: '한 모서리에 면이 셋 이상 붙은 곳이 없습니다',
+      failDetail: `겹친 모서리 ${fmt(report.nonManifoldEdgeCount)}개, 점 ${fmt(report.nonManifoldVertexCount)}개`,
     }),
   );
 
   items.push(
     gradeItem({
       id: 'normals',
-      label: '법선 방향',
+      label: '면이 바깥을 보는지',
       max: 15,
       ok: report.inconsistentEdgeCount === 0,
       ratio: report.inconsistentEdgeCount / Math.max(1, report.edgeCount * 0.02),
-      okDetail: '모든 면이 같은 방향으로 정렬되어 있습니다',
-      failDetail: `방향이 어긋난 에지 ${fmt(report.inconsistentEdgeCount)}개`,
+      okDetail: '모든 면이 같은 쪽을 보고 있습니다',
+      failDetail: `방향이 엇갈린 모서리 ${fmt(report.inconsistentEdgeCount)}개`,
     }),
   );
 
   const shells = report.connectedComponents;
   items.push({
     id: 'shells',
-    label: '단일 껍질',
+    label: '한 덩어리인지',
     max: 10,
     earned: shells <= 1 ? 10 : Math.max(0, 12 - shells * 2),
     detail:
       shells <= 1
         ? '떠 있는 조각이 없습니다'
-        : `분리된 덩어리 ${fmt(shells)}개. 의도한 파츠 분할이 아니라면 부유 조각입니다`,
+        : `떨어진 덩어리 ${fmt(shells)}개. 일부러 나눈 게 아니면 떠 있는 조각입니다`,
   });
 
   items.push({
@@ -90,22 +90,22 @@ export function scorePrintability(report: ValidationReport): PrintabilityScore {
         : Math.min(9, Math.max(0, Math.round(10 * (1 - report.degenerateRatio / 0.001)))),
     detail:
       report.degenerateTriangles === 0
-        ? '면적이 0에 가까운 삼각형이 없습니다'
-        : `퇴화 삼각형 ${fmt(report.degenerateTriangles)}개 (${(report.degenerateRatio * 100).toFixed(3)}%)`,
+        ? '면적이 거의 없는 삼각형이 없습니다'
+        : `찌그러진 삼각형 ${fmt(report.degenerateTriangles)}개 (${(report.degenerateRatio * 100).toFixed(3)}%)`,
   });
 
   items.push({
     id: 'intersection',
-    label: '뚜껑 관통',
+    label: '메운 면이 뚫고 나가는지',
     max: 5,
     earned: !report.selfIntersectionChecked
       ? 5
       : Math.max(0, 5 - report.capSelfIntersections),
     detail: !report.selfIntersectionChecked
-      ? '메시가 커서 교차 검사를 생략했습니다'
+      ? '모델이 커서 겹침 검사를 건너뛰었습니다'
       : report.capSelfIntersections === 0
-        ? '새로 만든 면이 기존 표면을 뚫지 않았습니다'
-        : `기존 표면과 교차하는 뚜껑 삼각형 ${fmt(report.capSelfIntersections)}개`,
+        ? '새로 메운 면이 기존 표면을 뚫지 않았습니다'
+        : `기존 표면과 겹치는 새 면 ${fmt(report.capSelfIntersections)}개`,
   });
 
   const total = items.reduce((sum, item) => sum + item.earned, 0);
@@ -151,7 +151,7 @@ function toGrade(total: number): PrintabilityScore['grade'] {
 
 function toVerdict(total: number, report: ValidationReport): string {
   if (!report.watertight) {
-    return '경계가 열려 있어 슬라이서가 속을 못 채웁니다. 보정이 필요합니다.';
+    return '구멍이 열려 있어 슬라이서가 속을 못 채웁니다. 보정이 필요합니다.';
   }
   if (total >= 95) return '슬라이서에 그대로 넣어도 됩니다.';
   if (total >= 85) return '출력은 되는데 자잘한 결함이 남습니다.';

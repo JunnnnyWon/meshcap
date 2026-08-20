@@ -3,14 +3,14 @@ import { runPipeline } from '../pipeline.ts';
 import { buildTopology } from '../halfEdge.ts';
 import { traceBoundaryLoops } from '../boundary.ts';
 import { cube, nonManifoldFan } from '../__fixtures__/shapes.ts';
-import { SAMPLES } from '../../samples/index.ts';
+import { proceduralSample } from '../../samples/index.ts';
 
-const bust = SAMPLES.find((s) => s.id === 'bust');
-const wavy = SAMPLES.find((s) => s.id === 'wavy');
+const bust = proceduralSample('bust');
+const wavy = proceduralSample('wavy');
 
 describe('합성 샘플 회귀', () => {
   it('결함 회전체를 완전히 밀폐한다', () => {
-    const result = runPipeline(bust!.build(), { upAxis: bust!.upAxis });
+    const result = runPipeline(bust.build(), { upAxis: bust.upAxis });
 
     expect(result.repaired.watertight).toBe(true);
     expect(result.holes.every((hole) => hole.closed)).toBe(true);
@@ -19,7 +19,7 @@ describe('합성 샘플 회귀', () => {
   });
 
   it('물결 개구부 튜브를 완전히 밀폐한다', () => {
-    const result = runPipeline(wavy!.build(), { upAxis: wavy!.upAxis });
+    const result = runPipeline(wavy.build(), { upAxis: wavy.upAxis });
 
     expect(result.repaired.watertight).toBe(true);
     expect(result.holes).toHaveLength(2);
@@ -37,16 +37,16 @@ describe('법선 정렬 순서에 대한 절제 실험', () => {
    * 없는 삼각형이 덧붙는다.
    */
   it('정렬을 건너뛰면 뒤집힌 면이 구멍으로 오인된다', () => {
-    const withOrient = runPipeline(bust!.build(), { upAxis: bust!.upAxis });
-    const without = runPipeline(bust!.build(), { upAxis: bust!.upAxis, skipOrient: true });
+    const withOrient = runPipeline(bust.build(), { upAxis: bust.upAxis });
+    const without = runPipeline(bust.build(), { upAxis: bust.upAxis, skipOrient: true });
 
     // 실제 구멍은 몇 개뿐인데 뒤집힌 면 때문에 수십 개로 부풀려진다.
     expect(without.holes.length).toBeGreaterThan(withOrient.holes.length * 5);
   });
 
   it('정렬을 건너뛰면 없는 면이 덧붙어 부피가 달라진다', () => {
-    const withOrient = runPipeline(bust!.build(), { upAxis: bust!.upAxis });
-    const without = runPipeline(bust!.build(), { upAxis: bust!.upAxis, skipOrient: true });
+    const withOrient = runPipeline(bust.build(), { upAxis: bust.upAxis });
+    const without = runPipeline(bust.build(), { upAxis: bust.upAxis, skipOrient: true });
 
     expect(without.repaired.triangleCount).toBeGreaterThan(withOrient.repaired.triangleCount);
     expect(without.repaired.volume).not.toBeCloseTo(withOrient.repaired.volume, 3);

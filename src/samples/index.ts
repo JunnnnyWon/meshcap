@@ -6,7 +6,10 @@ export interface SampleModel {
   name: string;
   description: string;
   upAxis: UpAxis;
-  build: () => MeshData;
+  /** 합성 예제만 있다. 파일 예제는 url을 쓴다. */
+  build?: () => MeshData;
+  url?: string;
+  fileName?: string;
 }
 
 /**
@@ -148,9 +151,9 @@ const BUST_PROFILE: [number, number][] = [
 /**
  * 생성형 3D 서비스 출력물에서 흔한 결함을 한 번에 담은 합성 예제.
  *
- * 실제 Meshy·Tripo 파일을 저장소에 넣으면 용량과 라이선스가 모두 걸리므로,
- * 같은 종류의 결함을 절차적으로 재현했다. 바닥 개구부, 표면에 뚫린 구멍,
- * 쪼개진 정점, 뒤집힌 면이 모두 들어 있다.
+ * 첫 화면의 3D AI 카드는 보기용으로 줄인 STL을 쓴다. 벤치와 회귀는
+ * 같은 종류의 결함을 절차적으로 재현한 이 메시로 돌린다. 바닥 개구부, 표면에
+ * 뚫린 구멍, 쪼개진 정점, 뒤집힌 면이 모두 들어 있다.
  */
 function buildDefectiveBust(): MeshData {
   const segments = 40;
@@ -199,11 +202,19 @@ function buildWavyTube(): MeshData {
   return { positions: new Float32Array(positions), indices: new Uint32Array(indices) };
 }
 
+export function proceduralSample(id: string): SampleModel & { build: () => MeshData } {
+  const sample = SAMPLES.find((entry) => entry.id === id);
+  if (!sample?.build) {
+    throw new Error(`합성 예제 ${id}가 없습니다.`);
+  }
+  return sample as SampleModel & { build: () => MeshData };
+}
+
 export const SAMPLES: SampleModel[] = [
   {
     id: 'bust',
     name: '구멍 난 흉상',
-    description: '바닥이 뚫려 있고 표면에 구멍 세 개, 정점이 쪼개지고 면이 뒤집힌 예',
+    description: '바닥이 뚫려 있고 표면에 구멍 세 개, 점이 갈라지고 면이 뒤집힌 예',
     upAxis: 'y',
     build: buildDefectiveBust,
   },
@@ -213,5 +224,21 @@ export const SAMPLES: SampleModel[] = [
     description: '테두리가 물결쳐서 평면으로는 못 메우는 예',
     upAxis: 'y',
     build: buildWavyTube,
+  },
+  {
+    id: 'meshy',
+    name: '3D AI 캐릭터 A',
+    description: '3D AI로 만든 캐릭터. 팔 아래와 바닥에 구멍이 남아 있다.',
+    upAxis: 'z',
+    url: '/examples/character-a.stl',
+    fileName: 'character-a.stl',
+  },
+  {
+    id: 'tripo',
+    name: '3D AI 캐릭터 B',
+    description: '같은 모습의 다른 3D AI 결과. 구멍 난 곳이 다르다.',
+    upAxis: 'z',
+    url: '/examples/character-b.stl',
+    fileName: 'character-b.stl',
   },
 ];

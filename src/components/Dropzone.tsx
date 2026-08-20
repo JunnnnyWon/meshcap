@@ -30,16 +30,17 @@ export function Dropzone({
     <div className="flex-1 grid-backdrop flex items-center justify-center px-6 py-14">
       <div className="w-full max-w-[880px]">
         <div className="mb-10 max-w-[620px]">
-          <div className="label-caps mb-4">생성 메시 구멍 메우기</div>
+          <div className="label-caps mb-4">AI 3D 구멍 메우기</div>
           <h1 className="text-[38px] leading-[1.15] font-semibold tracking-[-0.02em] text-ink-100">
-            미리보기에선 괜찮은데
+            미리보기에서는 괜찮은데
             <br />
-            <span className="text-amber-accent">겨드랑이와 바닥이 뚫려 있습니다.</span>
+            <span className="text-amber-accent">안쪽과 바닥이 뚫려 있습니다.</span>
           </h1>
           <p className="mt-5 text-[14.5px] leading-relaxed text-ink-300">
-            Meshy나 Tripo로 뽑은 캐릭터를 슬라이서에 넣으면 겨드랑이, 머리카락 사이, 바닥이 열려
-            있는 경우가 많습니다. 슬라이서는 법선으로 안팎을 보기 때문에 속이 비어 버립니다.
-            파일을 넣으면 구멍을 나눠 메우고, 출력해도 되는지 100점으로 채점합니다.
+            3D AI로 만든 캐릭터를 슬라이서에 넣으면 팔 아래, 머리카락 사이, 바닥이 자주
+            뚫려 있습니다. 슬라이서는 면이 어느 쪽을 보는지로 안팎을 가리기 때문에, 뚫린
+            곳은 속이 비어 버립니다. 파일을 넣으면 구멍을 나눠 메운 다음, 출력해도 되는지
+            100점으로 채점합니다.
           </p>
         </div>
 
@@ -114,25 +115,49 @@ export function Dropzone({
         )}
 
         <div className="mt-10">
-          <div className="label-caps mb-3">파일이 없으면 예제로 보세요</div>
+          <div className="label-caps mb-3">3D AI 예제</div>
+          <p className="text-[12px] leading-relaxed text-ink-500 mb-3">
+            원본은 백만 삼각형이 넘어서, 구멍과 실루엣은 두고 면만 줄인 보기용입니다.
+          </p>
           <div className="grid sm:grid-cols-2 gap-3">
-            {SAMPLES.map((sample) => (
-              <button
-                key={sample.id}
-                type="button"
-                onClick={() => onSample(sample)}
-                className="text-left rounded-lg border border-ink-800 bg-ink-900/50 px-4 py-3.5 hover:border-ink-600 hover:bg-ink-850 transition-colors group"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[13.5px] font-medium text-ink-100">{sample.name}</span>
-                  <span className="text-ink-600 group-hover:text-amber-accent transition-colors">→</span>
-                </div>
-                <p className="text-[11.5px] leading-relaxed text-ink-400">{sample.description}</p>
-              </button>
+            {SAMPLES.filter((sample) => sample.url).map((sample) => (
+              <SampleCard key={sample.id} sample={sample} onSample={onSample} busy={busy} />
+            ))}
+          </div>
+
+          <div className="label-caps mt-8 mb-3">파일이 없으면 합성 예제로 보세요</div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {SAMPLES.filter((sample) => sample.build).map((sample) => (
+              <SampleCard key={sample.id} sample={sample} onSample={onSample} busy={busy} />
             ))}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function SampleCard({
+  sample,
+  onSample,
+  busy,
+}: {
+  sample: SampleModel;
+  onSample: (sample: SampleModel) => void;
+  busy: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => onSample(sample)}
+      className="text-left rounded-lg border border-ink-800 bg-ink-900/50 px-4 py-3.5 hover:border-ink-600 hover:bg-ink-850 transition-colors group disabled:opacity-50 disabled:pointer-events-none"
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[13.5px] font-medium text-ink-100">{sample.name}</span>
+        <span className="text-ink-600 group-hover:text-amber-accent transition-colors">→</span>
+      </div>
+      <p className="text-[11.5px] leading-relaxed text-ink-400">{sample.description}</p>
+    </button>
   );
 }
