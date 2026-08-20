@@ -34,9 +34,13 @@ export interface ValidateOptions {
   capTriangleStart?: number;
   /** 이 삼각형 수를 넘으면 교차 검사를 건너뛴다. */
   selfIntersectionLimit?: number;
+  /** 뚜껑-표면 쌍을 이만큼 보면 멈춘다. 헤어처럼 면이 빽빽한 모델에서 검사가 폭주하는 일을 막는다. */
+  pairTestLimit?: number;
 }
 
 const DEFAULT_SELF_INTERSECTION_LIMIT = 600_000;
+/** V8 Set 한도(2^24)보다 훨씬 낮게 잡아, 쌍을 모으다 탭이 죽지 않게 한다. */
+const DEFAULT_PAIR_TEST_LIMIT = 250_000;
 
 export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): ValidationReport {
   const topology = buildTopology(mesh);
@@ -89,9 +93,19 @@ export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): Val
 
   const limit = options.selfIntersectionLimit ?? DEFAULT_SELF_INTERSECTION_LIMIT;
   const canCheck = options.capTriangleStart !== undefined && F <= limit;
-  const capSelfIntersections = canCheck
-    ? countCapIntersections(mesh, options.capTriangleStart as number, bounds.diagonal)
-    : 0;
+  let capSelfIntersections = 0;
+  let selfIntersectionChecked = canCheck;
+  if (canCheck) {
+    const intersection = countCapIntersections(
+      mesh,
+      options.capTriangleStart as number,
+      bounds.diagonal,
+      options.pairTestLimit ?? DEFAULT_PAIR_TEST_LIMIT,
+    );
+    capSelfIntersections = intersection.count;
+    // 한도에 걸렸는데 교차가 하나도 없으면, 깨끗하다고 단정하지 않는다.
+    selfIntersectionChecked = intersection.completed || intersection.count > 0;
+  }
 
   return {
     vertexCount: topology.vertexCount,
@@ -110,7 +124,7 @@ export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): Val
     volume: Math.abs(volume),
     surfaceArea,
     capSelfIntersections,
-    selfIntersectionChecked: canCheck,
+    selfIntersectionChecked,
   };
 }
 
@@ -121,10 +135,15 @@ export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): Val
  * 문제가 되는 것은 우리가 방금 만들어 넣은 면이다. 균일 격자에 삼각형을 넣고
  * 같은 칸에 든 후보끼리만 분리축 검사를 하면 뚜껑 개수에 비례하는 비용으로 끝난다.
  */
-function countCapIntersections(mesh: MeshData, capStart: number, diagonal: number): number {
+function countCapIntersections(
+  mesh: MeshData,
+  capStart: number,
+  diagonal: number,
+  pairLimit: number,
+): { count: number; completed: boolean } {
   const { positions, indices } = mesh;
   const F = indices.length / 3;
-  if (capStart >= F || diagonal <= 0) return 0;
+  if (capStart >= F || diagonal <= 0) return { count: 0, completed: true };
 
   const cell = diagonal / 64;
   const buckets = new Map<number, number[]>();
@@ -180,8 +199,8 @@ function countCapIntersections(mesh: MeshData, capStart: number, diagonal: numbe
   }
 
   const eps = diagonal * 1e-9;
-  const seen = new Set<number>();
   let count = 0;
+  let tests = 0;
 
   for (let f = capStart; f < F; f++) {
     const b = triBounds(f);
@@ -205,15 +224,16 @@ function countCapIntersections(mesh: MeshData, capStart: number, diagonal: numbe
     }
 
     for (const g of candidates) {
-      const pairKey = f < g ? f * F + g : g * F + f;
-      if (seen.has(pairKey)) continue;
-      seen.add(pairKey);
+      // 뚜껑끼리의 쌍은 큰 인덱스에서만 본다. 전역 Set에 쌍을 쌓지 않는다.
+      if (g >= capStart && g >= f) continue;
       if (sharesVertex(indices, f, g)) continue;
+      if (tests >= pairLimit) return { count, completed: false };
+      tests++;
       if (trianglesIntersect(positions, indices, f, g, eps)) count++;
     }
   }
 
-  return count;
+  return { count, completed: true };
 }
 
 function sharesVertex(indices: Uint32Array, f: number, g: number): boolean {
