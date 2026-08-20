@@ -8,6 +8,7 @@ export const STRATEGY_LABEL: Record<CapStrategy, string> = {
   planar: '평면으로 메움',
   liepa: '곡면으로 메움',
   flatBase: '바닥 받침',
+  collapse: '작게 닫음',
   skip: '건너뜀',
 };
 
@@ -17,6 +18,7 @@ export const STRATEGY_REASON: Record<CapStrategy, string> = {
   planar: '테두리가 거의 평평해서 그대로 삼각형으로 나눴습니다',
   liepa: '테두리가 평평하지 않아서, 꺾이는 각이 작게 채웠습니다',
   flatBase: '아래를 향한 큰 구멍이라 바닥을 평평하게 막았습니다',
+  collapse: '점이 너무 가까워 삼각형을 넣지 않고 한 점으로 모았습니다',
   skip: '테두리가 안 닫혀서 억지로 메우지 않았습니다',
 };
 
@@ -26,6 +28,7 @@ const STRATEGY_TONE: Record<CapStrategy, 'neutral' | 'patch' | 'amber' | 'flaw'>
   planar: 'patch',
   liepa: 'amber',
   flatBase: 'patch',
+  collapse: 'neutral',
   skip: 'flaw',
 };
 

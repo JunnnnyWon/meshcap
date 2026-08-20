@@ -20,6 +20,7 @@ export type CapStrategy =
   | 'planar' // 최적 평면에 투영 후 earcut
   | 'liepa' // 최소 이면각·면적 동적계획 삼각화
   | 'flatBase' // 바닥 개구부를 평평한 받침으로 마감
+  | 'collapse' // 아주 작은 구멍을 한 점으로 모은다
   | 'skip'; // 닫히지 않아 안전하게 메울 수 없음
 
 export interface ClassifyOptions {
@@ -34,6 +35,15 @@ export interface ClassifyOptions {
   flatBaseMinRelativeSize?: number;
   /** 바닥 받침으로 처리하지 않고 일반 구멍으로 둘 때 사용한다. */
   disableFlatBase?: boolean;
+  /**
+   * bbox 대각선 대비 이 비율보다 둘레가 짧고, 평균 에지 몇 배 안이면
+   * 삼각화 대신 한 점으로 붕괴한다.
+   */
+  collapseMaxRelativeSize?: number;
+  /** 국소 평균 에지 길이 대비 둘레 상한. */
+  collapseEdgeMultiple?: number;
+  /** 붕괴를 시도할 최대 정점 수. */
+  collapseMaxVertices?: number;
   /**
    * 분류를 무시하고 모든 구멍에 같은 전략을 강제한다.
    * 분류기가 실제로 기여하는 몫을 재는 절제 실험에 쓴다.
@@ -73,6 +83,9 @@ export const DEFAULT_CLASSIFY_OPTIONS: Required<Omit<ClassifyOptions, 'upAxis' |
   liepaMaxVertices: 250,
   flatBaseMinRelativeSize: 0.04,
   disableFlatBase: false,
+  collapseMaxRelativeSize: 0.008,
+  collapseEdgeMultiple: 3.5,
+  collapseMaxVertices: 8,
   forceStrategy: undefined,
 };
 
@@ -89,6 +102,7 @@ export function classifyLoops(
   loops: BoundaryLoop[],
   options: ClassifyOptions = {},
   precomputedBounds?: Bounds,
+  meanEdgeLength = 0,
 ): LoopMetrics[] {
   const opts = { ...DEFAULT_CLASSIFY_OPTIONS, ...options };
   const bounds = precomputedBounds ?? computeBounds(mesh.positions);
@@ -133,7 +147,7 @@ export function classifyLoops(
       centroid[upIndex] <= bottomBand &&
       relativeSize >= opts.flatBaseMinRelativeSize;
 
-    const strategy = pickStrategy(loop, points.length, planarity, bottomFacing, opts);
+    const strategy = pickStrategy(loop, points.length, planarity, bottomFacing, relativeSize, perimeter, meanEdgeLength, opts);
 
     return {
       id,
@@ -156,15 +170,26 @@ function pickStrategy(
   n: number,
   planarity: number,
   bottomFacing: boolean,
+  relativeSize: number,
+  perimeter: number,
+  meanEdge: number,
   opts: typeof DEFAULT_CLASSIFY_OPTIONS,
 ): CapStrategy {
   if (!loop.closed || n < 3) return 'skip';
   if (opts.forceStrategy) return n === 3 ? 'single' : opts.forceStrategy;
-  if (n === 3) return 'single';
   if (bottomFacing) return 'flatBase';
+  if (
+    n <= opts.collapseMaxVertices &&
+    relativeSize < opts.collapseMaxRelativeSize &&
+    meanEdge > 0 &&
+    perimeter < opts.collapseEdgeMultiple * meanEdge
+  ) {
+    return 'collapse';
+  }
+  if (n === 3) return 'single';
   if (n <= opts.fanMaxVertices) return 'fan';
   if (planarity < opts.planarityThreshold) return 'planar';
-  // O(n^3)이라 큰 루프는 평면 투영으로 넘긴다. 품질보다 응답성이 우선이다.
+  // O(n^3)이라 큰 루프는 평면 투영으로 넘긴다. 품질보다 응답성을 우선한다.
   if (n <= opts.liepaMaxVertices) return 'liepa';
   return 'planar';
 }

@@ -34,6 +34,17 @@ export interface CapContext {
    * 비다양체가 되므로, 가능하면 피해서 자르기 위한 질의다.
    */
   edgeExists?: (a: number, b: number) => boolean;
+  /**
+   * 이 삼각형을 붙이면 면이 셋 모이는 에지가 생기는지.
+   * 생기면 그 삼각형은 커밋하지 않는다.
+   */
+  wouldCreateNonManifold?: (a: number, b: number, c: number) => boolean;
+  /** 뚜껑 삼각형을 실제로 붙인 뒤에 면 수를 갱신한다. */
+  commitTriangle?: (a: number, b: number, c: number) => void;
+  /** 무향 에지에 지금 접한 면 수. 패치 전체를 가상으로 붙여 보기 위해 쓴다. */
+  edgeFaceCount?: (a: number, b: number) => number;
+  /** 정점마다 접한 에지의 평균 길이. Liepa 세분이 주변 밀도를 맞출 때 쓴다. */
+  vertexMeanEdge?: Float32Array;
 }
 
 export const EMPTY_PATCH: CapPatch = { newPositions: [], triangles: [] };

@@ -133,12 +133,11 @@ describe('runPipeline', () => {
     expect(planar?.addedTriangles).toBe(22);
   });
 
-  it('Liepa 삼각화도 새 정점 없이 n-2개 삼각형을 만든다', () => {
+  it('Liepa 삼각화는 Steiner 정점을 넣을 수 있고 그래도 밀폐된다', () => {
     const result = runPipeline(openCylinder(24, 1, 2, 0.5), { disableFlatBase: true });
     const liepa = result.holes.find((h) => h.appliedStrategy === 'liepa');
 
-    expect(liepa?.addedVertices).toBe(0);
-    expect(liepa?.addedTriangles).toBe(22);
+    expect(liepa?.addedTriangles).toBeGreaterThanOrEqual(22);
     expect(result.repaired.watertight).toBe(true);
   });
 

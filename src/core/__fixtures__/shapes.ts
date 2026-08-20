@@ -79,6 +79,30 @@ export function nonManifoldFan(): MeshData {
   );
 }
 
+/**
+ * 한 정점만 공유하는 나비넥타이. 에지는 다양체인데 정점이 아니다.
+ * 팬을 나눠 정점을 복제해야 두 시트가 떨어진다.
+ */
+export function nonManifoldFin(): MeshData {
+  return mesh(
+    [
+      0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 1, 0, 0, 1, -1, 0, 1,
+    ],
+    [0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 5, 6, 0, 6, 7, 0, 7, 5],
+  );
+}
+
+/**
+ * 같은 평면의 사각형 두 장이 좁은 틈을 두고 마주 본다.
+ * 갭 클로징이 열린 테두리를 닫힌 루프로 승격하는지 검증할 때 쓴다.
+ */
+export function gappedQuads(): MeshData {
+  return mesh(
+    [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1.02, 0, 0, 2.02, 0, 0, 2.02, 1, 0, 1.02, 1, 0],
+    [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7],
+  );
+}
+
 /** 서로 떨어진 정사면체 두 개. 연결 요소가 2다. */
 export function twoTetrahedra(): MeshData {
   const a = tetrahedron();
@@ -147,4 +171,33 @@ export function openCylinder(
   }
 
   return mesh(positions, indices);
+}
+
+/**
+ * 큰 평면 한가운데에 아주 작은 삼각형 구멍이 난 메시.
+ * 미세 구멍 붕괴가 삼각화 대신 한 점으로 모으는지 검증할 때 쓴다.
+ */
+export function planeWithPinhole(): MeshData {
+  const R = 100;
+  const outer: number[] = [0, 0, 0, R, 0, 0, R / 2, (R * Math.sqrt(3)) / 2, 0];
+  const cx = R / 2;
+  const cy = (R * Math.sqrt(3)) / 6;
+  const r = 0.04;
+  const inner: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2 + Math.PI / 2;
+    inner.push(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0);
+  }
+
+  const indices: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const o0 = i;
+    const o1 = (i + 1) % 3;
+    const i0 = 3 + i;
+    const i1 = 3 + ((i + 1) % 3);
+    indices.push(o0, o1, i1);
+    indices.push(o0, i1, i0);
+  }
+
+  return mesh([...outer, ...inner], indices);
 }

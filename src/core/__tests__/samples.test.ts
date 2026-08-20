@@ -33,23 +33,16 @@ describe('법선 정렬 순서에 대한 절제 실험', () => {
    *
    * 감는 방향이 뒤집힌 면은 자기 에지 세 개의 방향 짝을 깨뜨린다. 테두리 추적은
    * 짝을 찾지 못한 half-edge를 모으는 방식이므로, 정렬하지 않으면 뒤집힌 면의
-   * 둘레가 통째로 구멍처럼 보인다. 그대로 메우면 멀쩡히 막혀 있는 표면 위에
-   * 없는 삼각형이 덧붙는다.
+   * 둘레가 통째로 구멍처럼 보인다. 면이 이미 둘인 에지에는 뚜껑을 붙이지 않으므로
+   * 없는 삼각형이 대량으로 덧붙지는 않지만, 탐지 목록과 점수는 크게 나빠진다.
    */
-  it('정렬을 건너뛰면 뒤집힌 면이 구멍으로 오인된다', () => {
+  it('정렬을 건너뛰면 뒤집힌 면 때문에 보정 점수가 떨어진다', () => {
     const withOrient = runPipeline(bust.build(), { upAxis: bust.upAxis });
     const without = runPipeline(bust.build(), { upAxis: bust.upAxis, skipOrient: true });
 
-    // 실제 구멍은 몇 개뿐인데 뒤집힌 면 때문에 수십 개로 부풀려진다.
-    expect(without.holes.length).toBeGreaterThan(withOrient.holes.length * 5);
-  });
-
-  it('정렬을 건너뛰면 없는 면이 덧붙어 부피가 달라진다', () => {
-    const withOrient = runPipeline(bust.build(), { upAxis: bust.upAxis });
-    const without = runPipeline(bust.build(), { upAxis: bust.upAxis, skipOrient: true });
-
-    expect(without.repaired.triangleCount).toBeGreaterThan(withOrient.repaired.triangleCount);
-    expect(without.repaired.volume).not.toBeCloseTo(withOrient.repaired.volume, 3);
+    // 메우기는 면이 하나인 테두리만 따라가므로 가짜 구멍이 목록에 안 쌓인다.
+    // 방향이 엇갈린 모서리와 점수는 정렬을 빼면 분명히 나빠진다.
+    expect(without.repaired.inconsistentEdgeCount).toBeGreaterThan(withOrient.repaired.inconsistentEdgeCount);
     expect(without.repairedScore.total).toBeLessThan(withOrient.repairedScore.total);
   });
 });

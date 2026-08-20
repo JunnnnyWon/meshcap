@@ -18,16 +18,18 @@ export interface BoundaryLoop {
  * 배열을 만들면 메모리가 감당이 안 되므로 개수만 세는 쪽은 아무것도 담지 않는다.
  */
 function walkBoundary(
-  topology: Topology,
+  vertexCount: number,
+  boundaryFrom: Uint32Array,
+  boundaryTo: Uint32Array,
   onLoop: (vertices: number[] | null, length: number, closed: boolean) => void,
   collect: boolean,
+  minLength = 3,
 ): void {
-  const { boundaryFrom, boundaryTo } = topology;
   const count = boundaryFrom.length;
   if (count === 0) return;
 
   // from 정점별로 나가는 경계 half-edge를 연쇄로 엮는다.
-  const head = new Int32Array(topology.vertexCount).fill(-1);
+  const head = new Int32Array(vertexCount).fill(-1);
   const next = new Int32Array(count).fill(-1);
   for (let i = count - 1; i >= 0; i--) {
     const from = boundaryFrom[i];
@@ -71,7 +73,7 @@ function walkBoundary(
       current = following;
     }
 
-    if (length >= 3) onLoop(vertices, length, closed);
+    if (length >= minLength) onLoop(vertices, length, closed);
   }
 }
 
@@ -83,23 +85,58 @@ function walkBoundary(
  * 별도 루프로 처리한다. 결과가 달라져도 전체를 빠짐없이 덮는다는 점은 유지된다.
  */
 export function traceBoundaryLoops(topology: Topology): BoundaryLoop[] {
+  return collectLoops(topology.vertexCount, topology.boundaryFrom, topology.boundaryTo, 3);
+}
+
+/**
+ * 면이 하나인 에지만으로 구멍을 복원한다. 비다양체 잉여는 메우지 않는다.
+ */
+export function traceFillableLoops(topology: Topology): BoundaryLoop[] {
+  return collectLoops(topology.vertexCount, topology.fillFrom, topology.fillTo, 3);
+}
+
+function collectLoops(
+  vertexCount: number,
+  from: Uint32Array,
+  to: Uint32Array,
+  minLength: number,
+): BoundaryLoop[] {
   const loops: BoundaryLoop[] = [];
   walkBoundary(
-    topology,
+    vertexCount,
+    from,
+    to,
     (vertices, _length, closed) => {
       if (vertices) loops.push({ vertices, closed });
     },
     true,
+    minLength,
   );
-
-  // 큰 구멍부터 처리하면 시각화와 로그를 읽기 쉽다.
   loops.sort((a, b) => b.vertices.length - a.vertices.length);
   return loops;
+}
+
+/**
+ * 닫히지 않은 테두리 사슬. 한 에지만 남은 조각도 포함해 갭 클로징이 끝점을 붙일 수 있게 한다.
+ */
+export function traceOpenChains(topology: Topology): BoundaryLoop[] {
+  const chains: BoundaryLoop[] = [];
+  walkBoundary(
+    topology.vertexCount,
+    topology.fillFrom,
+    topology.fillTo,
+    (vertices, _length, closed) => {
+      if (vertices && !closed) chains.push({ vertices, closed });
+    },
+    true,
+    2,
+  );
+  return chains;
 }
 
 /** 테두리 개수만 센다. 정점 목록을 만들지 않아 큰 메시에서도 메모리가 늘지 않는다. */
 export function countBoundaryLoops(topology: Topology): number {
   let count = 0;
-  walkBoundary(topology, () => { count++; }, false);
+  walkBoundary(topology.vertexCount, topology.boundaryFrom, topology.boundaryTo, () => { count++; }, false);
   return count;
 }

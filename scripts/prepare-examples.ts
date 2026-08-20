@@ -1,11 +1,17 @@
 /**
  * 3D AI 원본 STL을 보기용으로 줄여 public/examples에 넣는다.
  *
+ * 격자로 모든 점을 합치면 머리카락처럼 얇은 자리가 찢어져 가짜 구멍이 수천 개
+ * 생긴다. 그래서 원본을 용접한 뒤, 진짜 테두리 정점은 합치지 않고 안쪽만 줄인다.
+ *
  *   npx tsx scripts/prepare-examples.ts
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildTopology } from '../src/core/halfEdge.ts';
+import type { MeshData } from '../src/core/types.ts';
+import { weldVertices } from '../src/core/weld.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = join(ROOT, 'public', 'examples');
@@ -34,12 +40,18 @@ function readBinaryStl(path: string): Float32Array {
   return positions;
 }
 
-function bounds(positions: Float32Array): { min: number[]; max: number[] } {
+function soupToMesh(positions: Float32Array): MeshData {
+  const indices = new Uint32Array(positions.length / 3);
+  for (let i = 0; i < indices.length; i++) indices[i] = i;
+  return weldVertices({ positions, indices }).mesh;
+}
+
+function bounds(mesh: MeshData): { min: number[]; max: number[] } {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < positions.length; i += 3) {
+  for (let i = 0; i < mesh.positions.length; i += 3) {
     for (let k = 0; k < 3; k++) {
-      const v = positions[i + k];
+      const v = mesh.positions[i + k];
       if (v < min[k]) min[k] = v;
       if (v > max[k]) max[k] = v;
     }
@@ -47,30 +59,53 @@ function bounds(positions: Float32Array): { min: number[]; max: number[] } {
   return { min, max };
 }
 
-function cluster(positions: Float32Array, cell: number): { positions: Float32Array; indices: Uint32Array } {
+/**
+ * 격자 클러스터. 경계 정점은 셀에 넣지 않아 원본 구멍이 찢어지지 않게 한다.
+ */
+function cluster(mesh: MeshData, cell: number, protectBoundary: boolean): MeshData {
+  const V = mesh.positions.length / 3;
+  const boundary = new Uint8Array(V);
+  if (protectBoundary) {
+    const topology = buildTopology(mesh);
+    for (let i = 0; i < topology.boundaryFrom.length; i++) {
+      boundary[topology.boundaryFrom[i]] = 1;
+      boundary[topology.boundaryTo[i]] = 1;
+    }
+  }
+
   const map = new Map<string, number>();
   const verts: number[] = [];
-  const indices: number[] = [];
+  const remap = new Int32Array(V).fill(-1);
 
-  const keyOf = (x: number, y: number, z: number) =>
-    `${Math.floor(x / cell)}|${Math.floor(y / cell)}|${Math.floor(z / cell)}`;
-
-  const vertex = (x: number, y: number, z: number) => {
-    const key = keyOf(x, y, z);
-    const existing = map.get(key);
-    if (existing !== undefined) return existing;
-    const id = map.size;
-    map.set(key, id);
-    verts.push(x, y, z);
-    return id;
+  const keyOf = (v: number) => {
+    if (boundary[v]) return `b:${v}`;
+    const o = v * 3;
+    const x = Math.floor(mesh.positions[o] / cell);
+    const y = Math.floor(mesh.positions[o + 1] / cell);
+    const z = Math.floor(mesh.positions[o + 2] / cell);
+    return `${x}|${y}|${z}`;
   };
 
-  const triCount = positions.length / 9;
-  for (let t = 0; t < triCount; t++) {
-    const o = t * 9;
-    const a = vertex(positions[o], positions[o + 1], positions[o + 2]);
-    const b = vertex(positions[o + 3], positions[o + 4], positions[o + 5]);
-    const c = vertex(positions[o + 6], positions[o + 7], positions[o + 8]);
+  for (let v = 0; v < V; v++) {
+    const key = keyOf(v);
+    const existing = map.get(key);
+    if (existing !== undefined) {
+      remap[v] = existing;
+      continue;
+    }
+    const id = map.size;
+    map.set(key, id);
+    remap[v] = id;
+    const o = v * 3;
+    verts.push(mesh.positions[o], mesh.positions[o + 1], mesh.positions[o + 2]);
+  }
+
+  const indices: number[] = [];
+  for (let t = 0; t < mesh.indices.length; t += 3) {
+    const a = remap[mesh.indices[t]];
+    const b = remap[mesh.indices[t + 1]];
+    const c = remap[mesh.indices[t + 2]];
+    if (a < 0 || b < 0 || c < 0) continue;
     if (a === b || b === c || c === a) continue;
     indices.push(a, b, c);
   }
@@ -78,7 +113,7 @@ function cluster(positions: Float32Array, cell: number): { positions: Float32Arr
   return { positions: new Float32Array(verts), indices: new Uint32Array(indices) };
 }
 
-function writeBinaryStl(path: string, mesh: { positions: Float32Array; indices: Uint32Array }, name: string) {
+function writeBinaryStl(path: string, mesh: MeshData, name: string) {
   const triCount = mesh.indices.length / 3;
   const buf = Buffer.alloc(84 + triCount * 50);
   buf.write(`MeshCap example ${name}`.padEnd(80, ' '), 0, 80, 'ascii');
@@ -129,18 +164,18 @@ function writeBinaryStl(path: string, mesh: { positions: Float32Array; indices: 
   writeFileSync(path, buf);
 }
 
-function reduceToTarget(positions: Float32Array, target: number) {
-  const { min, max } = bounds(positions);
+function reduceToTarget(mesh: MeshData, target: number) {
+  const { min, max } = bounds(mesh);
   const diag = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
   let lo = diag / 4000;
   let hi = diag / 40;
-  let best = cluster(positions, (lo + hi) / 2);
+  let best = cluster(mesh, (lo + hi) / 2, true);
 
   for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
-    const mesh = cluster(positions, mid);
-    const tris = mesh.indices.length / 3;
-    best = mesh;
+    const reduced = cluster(mesh, mid, true);
+    const tris = reduced.indices.length / 3;
+    best = reduced;
     if (tris > target * 1.15) lo = mid;
     else if (tris < target * 0.85) hi = mid;
     else break;
@@ -152,10 +187,16 @@ function reduceToTarget(positions: Float32Array, target: number) {
 mkdirSync(OUT_DIR, { recursive: true });
 
 for (const job of JOBS) {
+  if (!existsSync(job.src)) {
+    console.warn(`건너뜀 ${job.name}: 원본이 없습니다 (${job.src})`);
+    continue;
+  }
   console.log(`읽는 중 ${job.name}: ${job.src}`);
   const soup = readBinaryStl(job.src);
   console.log(`  원본 삼각형 ${soup.length / 9}`);
-  const mesh = reduceToTarget(soup, TARGET_TRIANGLES);
+  const welded = soupToMesh(soup);
+  console.log(`  용접 후 정점 ${welded.positions.length / 3}, 삼각형 ${welded.indices.length / 3}`);
+  const mesh = reduceToTarget(welded, TARGET_TRIANGLES);
   const dest = join(OUT_DIR, job.dest);
   writeBinaryStl(dest, mesh, job.name);
   const mb = (readFileSync(dest).length / 1024 / 1024).toFixed(1);

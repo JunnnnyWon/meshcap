@@ -77,6 +77,23 @@ export function DiagnosticsPanel({ result }: { result: PipelineResult }) {
           value={repaired.triangleCount - welded.triangleCount}
           tone="muted"
         />
+        {(result.repairSummary.splitEdges > 0 || result.repairSummary.clonedVertices > 0) && (
+          <Stat
+            label="겹친 모서리 분리"
+            value={result.repairSummary.splitEdges + result.repairSummary.clonedVertices}
+            tone="muted"
+          />
+        )}
+        {result.repairSummary.gapMergedPairs + result.repairSummary.gapSnappedToEdge > 0 && (
+          <Stat
+            label="틈 맞추기"
+            value={result.repairSummary.gapMergedPairs + result.repairSummary.gapSnappedToEdge}
+            tone="muted"
+          />
+        )}
+        {result.repairSummary.collapsedHoles > 0 && (
+          <Stat label="작게 닫은 구멍" value={result.repairSummary.collapsedHoles} tone="muted" />
+        )}
         <Stat label="겉넓이" value={repaired.surfaceArea.toFixed(3)} unit="u²" />
         <Stat label="부피" value={repaired.volume.toFixed(3)} unit="u³" />
         {orientSummary.flippedTriangles > 0 && (
@@ -94,6 +111,7 @@ export function DiagnosticsPanel({ result }: { result: PipelineResult }) {
 
       <Panel title="처리 시간">
         <Stat label="점 합치기" value={result.timings.weld.toFixed(1)} unit="ms" tone="muted" />
+        <Stat label="틈 맞추기" value={result.timings.prepare.toFixed(1)} unit="ms" tone="muted" />
         <Stat label="구멍 찾기" value={result.timings.analyze.toFixed(1)} unit="ms" tone="muted" />
         <Stat label="구멍 메우기" value={result.timings.cap.toFixed(1)} unit="ms" tone="muted" />
         <Stat label="면 방향 맞추기" value={result.timings.orient.toFixed(1)} unit="ms" tone="muted" />

@@ -1,6 +1,6 @@
 import { weldVertices, type WeldOptions } from './weld.ts';
 import { buildTopology } from './halfEdge.ts';
-import { traceBoundaryLoops } from './boundary.ts';
+import { traceFillableLoops } from './boundary.ts';
 import {
   classifyLoops,
   DEFAULT_CLASSIFY_OPTIONS,
@@ -14,6 +14,10 @@ import { validateMesh, type ValidationReport } from './validate.ts';
 import { scorePrintability, type PrintabilityScore } from './score.ts';
 import { computeBounds, type MeshData } from './types.ts';
 import { normalize, triangleNormalRaw, vertexAt, type Vec3 } from './geom.ts';
+import { computeVertexMeanEdge, EdgeIncidence } from './incidence.ts';
+import { splitNonManifold } from './splitNonManifold.ts';
+import { closeGaps } from './gapClose.ts';
+import { canCollapse, collapseMicroHoles } from './collapse.ts';
 
 export interface PipelineOptions extends ClassifyOptions {
   weld?: WeldOptions;
@@ -52,6 +56,7 @@ export interface HoleReport {
 
 export interface PipelineTimings {
   weld: number;
+  prepare: number;
   analyze: number;
   cap: number;
   orient: number;
@@ -85,6 +90,13 @@ export interface PipelineResult {
     removedInvalidTriangles: number;
     removedDuplicateTriangles: number;
   };
+  repairSummary: {
+    splitEdges: number;
+    clonedVertices: number;
+    gapMergedPairs: number;
+    gapSnappedToEdge: number;
+    collapsedHoles: number;
+  };
   orientSummary: {
     flippedTriangles: number;
     invertedShells: number;
@@ -97,6 +109,7 @@ export type PipelineStage =
   | 'diagnose'
   | 'weld'
   | 'orient'
+  | 'prepare'
   | 'analyze'
   | 'cap'
   | 'finalize'
@@ -106,6 +119,7 @@ export const STAGE_LABEL: Record<PipelineStage, string> = {
   diagnose: '원본 상태를 재는 중',
   weld: '겹친 점을 합치는 중',
   orient: '면의 방향을 맞추는 중',
+  prepare: '찢어진 자리와 틈을 맞추는 중',
   analyze: '구멍을 찾는 중',
   cap: '구멍을 메우는 중',
   finalize: '바깥 방향을 맞추는 중',
@@ -152,12 +166,68 @@ export function runPipeline(
   const orientFirstEnd = now();
   const analysisMesh = consistent.mesh;
 
+  let repairedMesh = analysisMesh;
+  const repairSummary = {
+    splitEdges: 0,
+    clonedVertices: 0,
+    gapMergedPairs: 0,
+    gapSnappedToEdge: 0,
+    collapsedHoles: 0,
+  };
+
+  stage('prepare');
+  const tPrepare = now();
+  if (!options.diagnoseOnly) {
+    const split = splitNonManifold(repairedMesh);
+    repairedMesh = split.mesh;
+    repairSummary.splitEdges = split.splitEdges;
+    repairSummary.clonedVertices = split.clonedVertices;
+
+    const gap = closeGaps(repairedMesh);
+    repairedMesh = gap.mesh;
+    repairSummary.gapMergedPairs = gap.mergedPairs;
+    repairSummary.gapSnappedToEdge = gap.snappedToEdge;
+  }
+  const prepareEnd = now();
+
   stage('analyze');
   const tAnalyze = now();
-  const topology = buildTopology(analysisMesh);
-  const loops = traceBoundaryLoops(topology);
-  const bounds = computeBounds(analysisMesh.positions);
-  const metrics = classifyLoops(analysisMesh, loops, options, bounds);
+  const bounds = computeBounds(repairedMesh.positions);
+  let incidence = new EdgeIncidence(repairedMesh);
+  let passTopology = buildTopology(repairedMesh);
+  let passMetrics = classifyLoops(
+    repairedMesh,
+    traceFillableLoops(passTopology),
+    options,
+    bounds,
+    incidence.meanLength,
+  );
+  downgradeInvalidCollapses(passMetrics, incidence);
+
+  const holes: HoleReport[] = [];
+  if (!options.diagnoseOnly) {
+    const collapseTargets = passMetrics.filter((metric) => metric.strategy === 'collapse');
+    if (collapseTargets.length > 0) {
+      const collapsed = collapseMicroHoles(repairedMesh, collapseTargets, incidence);
+      repairedMesh = collapsed.mesh;
+      repairSummary.collapsedHoles = collapsed.collapsed;
+      const collapsedSet = new Set(collapsed.ids);
+      for (const metric of passMetrics) {
+        if (!collapsedSet.has(metric.id)) continue;
+        holes.push(toHoleReport(metric, 'collapse', false, { newPositions: [], triangles: [] }));
+      }
+      incidence = new EdgeIncidence(repairedMesh);
+      passTopology = buildTopology(repairedMesh);
+      passMetrics = classifyLoops(
+        repairedMesh,
+        traceFillableLoops(passTopology),
+        options,
+        bounds,
+        incidence.meanLength,
+      );
+      downgradeInvalidCollapses(passMetrics, incidence);
+    }
+  }
   const analyzeEnd = now();
 
   const upAxis = options.upAxis ?? DEFAULT_CLASSIFY_OPTIONS.upAxis;
@@ -165,14 +235,11 @@ export function runPipeline(
 
   stage('cap');
   const tCap = now();
-  const capTriangleStart = analysisMesh.indices.length / 3;
-  const holes: HoleReport[] = [];
-
-  let repairedMesh = analysisMesh;
+  const capTriangleStart = repairedMesh.indices.length / 3;
   let capPasses = 0;
 
   if (options.diagnoseOnly) {
-    for (const metric of metrics) {
+    for (const metric of passMetrics) {
       holes.push(toHoleReport(metric, 'skip', false, { newPositions: [], triangles: [] }));
     }
   } else {
@@ -181,22 +248,28 @@ export function runPipeline(
      * 완전히 맞물리지 않으면 그 자리에 다시 작은 틈이 남는데, 비다양체 지점 근처에서
      * 특히 자주 생긴다. 남은 틈이 없어지거나 더 줄지 않을 때까지 반복한다.
      */
-    let passTopology = topology;
-    let passMetrics = metrics;
-
     for (let pass = 0; pass < (options.maxCapPasses ?? DEFAULT_MAX_CAP_PASSES); pass++) {
-      if (passMetrics.length === 0) break;
+      if (pass === 0) {
+        for (const metric of passMetrics) {
+          if (metric.strategy === 'skip') {
+            holes.push(toHoleReport(metric, 'skip', false, { newPositions: [], triangles: [] }));
+          }
+        }
+      }
+
+      const fillable = passMetrics
+        .map(fillStrategy)
+        .filter((metric) => metric.strategy !== 'skip' && metric.strategy !== 'collapse');
+      if (fillable.length === 0) break;
 
       const extraPositions: number[] = [];
       const extraTriangles: number[] = [];
       const lookup = buildBoundaryFaceLookup(passTopology, repairedMesh.positions.length / 3);
-      const existing = collectEdgesAmongLoopVertices(repairedMesh, passMetrics);
-      const vertexTotal = repairedMesh.positions.length / 3;
-      const edgeExists = (a: number, b: number) =>
-        existing.has(a < b ? a * vertexTotal + b : b * vertexTotal + a);
+      incidence = new EdgeIncidence(repairedMesh);
+      const vertexMeanEdge = computeVertexMeanEdge(repairedMesh);
       const baseCount = repairedMesh.positions.length / 3;
 
-      for (const metric of passMetrics) {
+      for (const metric of fillable) {
         const outcome = applyCap({
           mesh: repairedMesh,
           metrics: metric,
@@ -205,7 +278,11 @@ export function runPipeline(
           upIndex,
           adjacentNormals: collectAdjacentNormals(repairedMesh, metric, lookup),
           flatBaseOffsetRatio: options.flatBaseOffsetRatio,
-          edgeExists,
+          edgeExists: (a, b) => incidence.count(a, b) > 0,
+          wouldCreateNonManifold: (a, b, c) => incidence.wouldCreateNonManifold(a, b, c),
+          commitTriangle: (a, b, c) => incidence.addTriangle(a, b, c),
+          edgeFaceCount: (a, b) => incidence.count(a, b),
+          vertexMeanEdge,
         });
 
         appendAll(extraPositions, outcome.newPositions);
@@ -227,14 +304,17 @@ export function runPipeline(
       capPasses++;
 
       passTopology = buildTopology(repairedMesh);
-      if (passTopology.unmatchedHalfEdgeCount === 0) break;
+      if (passTopology.boundaryEdgeCount === 0) break;
 
+      const nextIncidence = new EdgeIncidence(repairedMesh);
       const nextMetrics = classifyLoops(
         repairedMesh,
-        traceBoundaryLoops(passTopology),
+        traceFillableLoops(passTopology),
         options,
         bounds,
+        nextIncidence.meanLength,
       );
+      downgradeInvalidCollapses(nextMetrics, nextIncidence);
       // 더 줄지 않으면 같은 자리를 맴돌고 있는 것이므로 멈춘다.
       if (nextMetrics.length >= passMetrics.length) break;
       passMetrics = nextMetrics;
@@ -270,6 +350,8 @@ export function runPipeline(
   });
   const validateEnd = now();
 
+  for (let i = 0; i < holes.length; i++) holes[i].id = i;
+
   return {
     raw,
     welded,
@@ -291,9 +373,11 @@ export function runPipeline(
       removedInvalidTriangles: weld.removedInvalidTriangles,
       removedDuplicateTriangles: weld.removedDuplicateTriangles,
     },
+    repairSummary,
     orientSummary,
     timings: {
       weld: weldEnd - tWeld,
+      prepare: prepareEnd - tPrepare,
       analyze: analyzeEnd - tAnalyze,
       cap: capEnd - tCap,
       orient: orientFirstEnd - tOrientFirst + (orientEnd - tOrient),
@@ -329,35 +413,20 @@ function toHoleReport(
   };
 }
 
-/**
- * 테두리 정점끼리 이미 이어져 있는 에지를 모은다.
- *
- * 삼각화가 그런 쌍을 대각선으로 다시 만들면 그 에지에 면이 하나 더 붙어 비다양체가
- * 된다. 테두리 정점만 표시해 두고 삼각형을 한 번 훑으면, 양 끝이 모두 테두리에 속한
- * 에지만 골라낼 수 있다. 결과 집합은 테두리 크기에 비례해 작다.
- */
-function collectEdgesAmongLoopVertices(mesh: MeshData, metrics: LoopMetrics[]): Set<number> {
-  const vertexTotal = mesh.positions.length / 3;
-  const onLoop = new Uint8Array(vertexTotal);
+function downgradeInvalidCollapses(metrics: LoopMetrics[], incidence: EdgeIncidence): void {
   for (const metric of metrics) {
-    for (const v of metric.vertices) onLoop[v] = 1;
+    if (metric.strategy !== 'collapse') continue;
+    if (canCollapse(metric, incidence)) continue;
+    metric.strategy = metric.vertices.length === 3 ? 'single' : 'fan';
   }
+}
 
-  const edges = new Set<number>();
-  const { indices } = mesh;
-
-  for (let t = 0; t < indices.length; t += 3) {
-    const a = indices[t];
-    const b = indices[t + 1];
-    const c = indices[t + 2];
-    if (!onLoop[a] && !onLoop[b] && !onLoop[c]) continue;
-
-    if (onLoop[a] && onLoop[b]) edges.add(a < b ? a * vertexTotal + b : b * vertexTotal + a);
-    if (onLoop[b] && onLoop[c]) edges.add(b < c ? b * vertexTotal + c : c * vertexTotal + b);
-    if (onLoop[c] && onLoop[a]) edges.add(c < a ? c * vertexTotal + a : a * vertexTotal + c);
-  }
-
-  return edges;
+function fillStrategy(metric: LoopMetrics): LoopMetrics {
+  if (metric.strategy !== 'collapse') return metric;
+  return {
+    ...metric,
+    strategy: metric.vertices.length === 3 ? 'single' : 'fan',
+  };
 }
 
 /** 방향 있는 경계 에지에서 그 에지에 접한 면을 찾을 수 있게 한다. */
@@ -366,8 +435,8 @@ function buildBoundaryFaceLookup(
   vertexCount: number,
 ): Map<number, number> {
   const lookup = new Map<number, number>();
-  for (let i = 0; i < topology.boundaryFrom.length; i++) {
-    lookup.set(topology.boundaryFrom[i] * vertexCount + topology.boundaryTo[i], topology.boundaryFace[i]);
+  for (let i = 0; i < topology.fillFrom.length; i++) {
+    lookup.set(topology.fillFrom[i] * vertexCount + topology.fillTo[i], topology.fillFace[i]);
   }
   return lookup;
 }

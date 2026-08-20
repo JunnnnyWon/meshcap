@@ -44,9 +44,11 @@ export function MethodPage() {
             생성형 3D 서비스가 내놓는 삼각형 메시는 화면에서는 닫혀 보이지만, 슬라이서가 요구하는
             밀폐와 다양체 조건은 자주 깨집니다. UV 이음매에서 정점이 중복되고 면의 감는 방향이
             뒤섞이며, 비다양체 에지에서는 흔히 쓰는 경계 정의가 순회를 잃습니다. MeshCap은 처리
-            순서를 바꿉니다. 공간 해시 용접으로 거짓 경계를 없애고, 면 방향을 맞춘 다음, 짝을 찾지
-            못한 half-edge만으로 닫힌 루프를 복원합니다. 구멍마다 둘레, 평면성, 방향을 재서 부채꼴,
-            평면 투영, Liepa 동적계획, 바닥 받침 중 하나를 고릅니다. 밀폐, 다양체, 법선, 관통은
+            순서를 바꿉니다. 공간 해시 용접으로 거짓 경계를 없애고, 면 방향을 맞춘 다음, 면이
+            하나인 에지만으로 메울 구멍을 복원합니다. 면이 셋 이상인 에지에서 고립된 여분을
+            떼고, 열린 테두리 끝점은 가까운 끝점과 붙입니다. 구멍마다 둘레, 평면성, 방향을 재서
+            부채꼴, 평면 투영, Liepa 동적계획, 바닥 받침, 미세 붕괴 중 하나를 고릅니다. 면이 이미
+            둘인 에지에는 뚜껑을 붙이지 않습니다. 밀폐, 다양체, 법선, 관통은
             100점으로 환산합니다. 코어는 three.js에 의존하지 않는 TypeScript라 브라우저 워커와 연산
             서버가 같은 숫자를 냅니다.
           </p>
@@ -55,8 +57,9 @@ export function MethodPage() {
             섞인 회전체는 아무 구멍이나 부채꼴로 메우면 {bust?.variants.naiveFan.score ?? 75}점에
             머물고, MeshCap은 {bust?.variants.meshcap.score ?? 100}점에 도달합니다. 3D AI A 출력 309만
             삼각형은 브라우저에서 약 7초 만에 경계 에지 120개가 0개가 되어 94점에서 96점으로
-            올랐습니다. 3D AI B 190만 삼각형은 97점에서 99점입니다. 표면을 닫으면 이미 면 셋이 공유하던
-            에지의 비다양체가 더 심해질 수 있습니다. 그래서 채점에서 두 항목을 나눴습니다.
+            올랐습니다. 3D AI B 190만 삼각형은 97점에서 99점입니다. 표면을 닫는 일과 다양체로 만드는
+            일이 충돌할 수 있어, 채점에서 두 항목을 나눴습니다. 현재 파이프라인은 비다양체 에지를
+            먼저 분리하고, 면이 둘인 에지에는 뚜껑을 거부합니다.
           </p>
         </Section>
 
@@ -81,10 +84,13 @@ export function MethodPage() {
         <Section number="2" title="관련 연구">
           <p>
             구멍 메우기는 기하 처리에서 이미 많이 다룬 문제입니다. Liepa는 경계의 모든 삼각화 가운데 이면각과
-            넓이를 사전식으로 최소화하는 동적계획을 제안했고, MeshCap의 곡면 구멍은 이 목적함수를
-            따릅니다 [1]. Barequet와 Sharir는 결손 영역을 최소 넓이 삼각화로 메웠고 [2], Attene의
-            MeshFix는 비다양체와 자기교차를 한꺼번에 고치는 데스크톱 수리기입니다 [3]. MeshLab은
-            이 계열 필터를 대화형으로 묶어 두었습니다 [4].
+            넓이를 사전식으로 최소화하는 동적계획을 제안했고, 이어서 Steiner 정점으로 밀도를 맞추고
+            라플라시안 페어링으로 곡률을 이었습니다. MeshCap의 곡면 구멍은 이 전체 절차를 따릅니다 [1].
+            Barequet와 Sharir는 결손 영역을 최소 넓이 삼각화로 메웠고 [2], Borodin은 열린 테두리 끝점을
+            점진적으로 붙이는 갭 클로징을 제안했습니다 [6]. Attene의 MeshFix는 비다양체를 조합적
+            다양체로 바꾼 뒤 구멍을 메웁니다 [3]. Guéziec는 시트를 찢어 다양체로 만드는 절단·봉합을
+            정리했습니다 [7]. Carr와 Branch는 구멍 주변에 로컬 RBF를 맞춰 곡면을 보간했습니다 [8][9].
+            MeshLab은 이 계열 필터를 대화형으로 묶어 두었습니다 [4].
           </p>
           <p>
             생성형 출력은 가정이 다릅니다. 정점이 UV 이음매에서 의도적으로 갈라져 있고, 면 방향이
@@ -99,7 +105,7 @@ export function MethodPage() {
         <Section number="3" title="방법">
           <p>
             입력은 좌표 배열과 삼각형 인덱스뿐입니다. 텍스처·재질·원본 파일은 파이프라인에 들어오지
-            않습니다. 처리는 그림 1의 아홉 단계입니다.
+            않습니다. 처리는 그림 1의 순서입니다.
           </p>
 
           <Pipeline />
@@ -173,7 +179,23 @@ export function MethodPage() {
             바깥 방향 판정은 구멍을 다 메운 뒤에 둡니다.
           </p>
 
-          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.4 구멍 분류</h3>
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.4 비다양체 분리와 갭 클로징</h3>
+          <p>
+            구멍 분류에 들어가기 전에 두 가지를 먼저 합니다. 면이 셋 이상 모인 에지에서 고립된
+            여분 삼각형을 제거하고, 나비넥타이처럼 팬이 둘인 정점은 복제해 시트를 나눕니다.
+            머리카락처럼 큰 교차 시트는 통째로 떨어지므로 그대로 두고, 면이 둘인 에지에는
+            뚜껑을 붙이지 않습니다. 그 다음 열린 테두리의 끝점끼리, 거의 겹친 평행 경계끼리,
+            끝점과 맞은편 에지를 가까운 거리 안에서 붙입니다. 메우기는 면이 하나인 테두리만
+            대상으로 합니다.
+          </p>
+          <p>
+            닫히지 않은 테두리는 끝점을 공간 해시로 모아, 국소 평균 에지 길이의 두 배(bbox 대각선의
+            1%를 넘지 않음) 안에서 법선이 어긋나지 않는 끝점끼리 병합합니다. 남은 끝점은 다른 경계
+            에지에 스냅합니다. 새 채움 알고리즘이 아니라, 기존 분류기가 받을 수 있는 닫힌 루프를
+            늘리는 전처리입니다.
+          </p>
+
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.5 구멍 분류</h3>
           <p>
             모든 구멍을 같은 방법으로 메우면 반드시 어딘가가 망가집니다. 피규어 바닥의 큰 개구부를
             부채꼴로 메우면 가운데가 원뿔처럼 솟아 서포트가 붙고, 반대로 헤어 클러스터 사이의 작은 개구를
@@ -192,8 +214,13 @@ export function MethodPage() {
               <tbody className="text-ink-300">
                 <StrategyRow
                   condition="테두리가 닫히지 않음"
-                  strategy="건너뜀"
-                  reason="어디까지가 구멍인지 확정할 수 없음"
+                  strategy="갭 클로징 후 재분류"
+                  reason="끝점이 가까우면 붙여 닫힌 루프로 승격. 그래도 안 닫히면 건너뜀"
+                />
+                <StrategyRow
+                  condition="둘레가 아주 짧은 진짜 구멍"
+                  strategy="미세 붕괴"
+                  reason="삼각형을 넣지 않고 테두리 점을 한 점으로 모음"
                 />
                 <StrategyRow condition="정점 3개" strategy="단일 삼각형" reason="삼각형 하나로 정확히 닫힘" />
                 <StrategyRow
@@ -226,7 +253,7 @@ export function MethodPage() {
             무차원 값입니다. 모델의 크기나 단위와 무관하게 같은 기준으로 판정하기 위한 정규화입니다.
           </p>
 
-          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.5 네 가지 메우기</h3>
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.6 메우기</h3>
           <div className="space-y-5">
             <Strategy name="부채꼴" tone="neutral">
               테두리 중심에 정점 하나를 두고 방사형으로 잇습니다. 가장 빠르지만 구멍이 커지면 중심점이
@@ -236,11 +263,16 @@ export function MethodPage() {
               테두리의 최적 평면을 Newell 방법으로 구하고, 그 평면에 투영해 earcut으로 삼각화합니다.
               새 정점을 만들지 않으므로 표면 밖으로 솟지 않고, 오목한 다각형도 올바르게 채웁니다.
             </Strategy>
-            <Strategy name="Liepa DP" tone="amber">
+            <Strategy name="Liepa DP + 세분·페어링" tone="amber">
               테두리를 채우는 모든 삼각화 중 <em className="not-italic text-ink-200">(이웃 면과 이루는
-              최대 이면각, 총 넓이)</em>를 사전식으로 최소화하는 것을 동적계획법으로 찾습니다. 넓이만
-              최소화하면 얇고 길쭉한 삼각형이 나오지만, 이면각을 앞세우면 주변 곡률을 이어받습니다.
-              평면에서 크게 벗어난 구멍에 씁니다.
+              최대 이면각, 총 넓이)</em>를 사전식으로 최소화하는 것을 동적계획법으로 찾습니다. 이어서
+              주변 평균 에지 길이보다 큰 삼각형의 무게중심에 Steiner 정점을 넣고, 내부 정점을
+              이중 라플라시안으로 풀어 주변 곡률을 잇습니다. 큰 비평면 구멍은 2-링에 맞춘 로컬
+              다조화 RBF의 제로 레벨로 Steiner 정점을 한 번 더 투영합니다.
+            </Strategy>
+            <Strategy name="미세 붕괴" tone="neutral">
+              둘레가 모델에 비해 아주 짧은 진짜 구멍은 삼각형을 넣지 않습니다. 테두리 정점을
+              무게중심으로 모아 핀홀을 없앱니다. 면이 이미 둘인 가짜 구멍에는 쓰지 않습니다.
             </Strategy>
             <Strategy name="바닥 받침" tone="patch">
               테두리를 같은 높이의 평면까지 수직으로 내려 옆벽을 만들고, 그 평면 링을 채웁니다. 기존
@@ -251,11 +283,12 @@ export function MethodPage() {
           </div>
           <p className="mt-5">
             어떤 전략이든 삼각형을 하나도 내놓지 못하면 부채꼴로 폴백합니다. 자기교차하는 테두리처럼
-            병적인 입력에서 품질을 조금 포기하더라도 구멍이 남는 것보다는 낫기 때문입니다. 뚜껑이 새
-            틈을 남기면 루프 집합이 줄지 않을 때까지 최대 네 번 반복합니다.
+            병적인 입력에서 품질을 조금 포기하더라도 구멍이 남는 것보다는 낫기 때문입니다. 다만 그
+            부채꼴이 면이 둘인 에지에 네 번째 면을 붙이게 되면 거절합니다. 뚜껑이 새 틈을 남기면
+            루프 집합이 줄지 않을 때까지 최대 네 번 반복합니다.
           </p>
 
-          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.6 출력 적합성 채점</h3>
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.7 출력 적합성 채점</h3>
           <p>
             배점은 슬라이서가 실제로 실패하는 순서를 따랐습니다. 경계 에지가 남으면 아예 슬라이싱이
             되지 않으므로 가장 무겁고, 뒤로 갈수록 출력은 되지만 품질이 떨어지는 항목입니다. 한 항목에
@@ -413,8 +446,9 @@ export function MethodPage() {
               보장되지만, 분할 결과가 유일하지는 않습니다.
             </Limitation>
             <Limitation>
-              면 셋이 공유하던 에지를 메우면 그 에지에 면이 하나 더 붙어 비다양체가 더 심해집니다.
-              표면을 닫는 것과 다양체로 만드는 것을 맞바꾼 셈입니다.
+              면 셋이 공유하던 에지는 시트를 정점 복제로 먼저 찢고, 그래도 면이 둘인 자리에는 뚜껑을
+              붙이지 않습니다. 가짜 구멍을 메워 비다양체가 늘어나던 경로는 막았지만, 이미 있던
+              비다양체 정점(나비넥타이)까지 없애지는 않습니다.
             </Limitation>
             <Limitation>
               겹쳐 있는 이중 표면은 같은 자리에 테두리가 두 벌 잡히고 뚜껑도 두 겹으로 생깁니다.
@@ -437,8 +471,8 @@ export function MethodPage() {
           <p className="mt-6">
             생성형 메시가 출력에 실패하는 이유는 구멍만이 아닙니다. 이음매 정점, 뒤집힌 면, 비다양체
             지점이 구멍 탐지부터 속입니다. MeshCap은 그 전처리를 앞에 두고, 남은 구멍만 나눠
-            메웁니다. 브라우저에서 서비스 출력물을 닫을 수 있다는 점은 확인했습니다. 닫는 대가로
-            다양체가 나빠질 수 있다는 점도 점수에 그대로 남깁니다.
+            메웁니다. 브라우저에서 서비스 출력물을 닫을 수 있다는 점은 확인했습니다. 닫기와 다양체를
+            동시에 만족하지 못하는 입력은 점수에 그대로 남습니다.
           </p>
         </Section>
 
@@ -465,6 +499,23 @@ export function MethodPage() {
               Mapbox, &ldquo;earcut: Fast, memory-efficient triangulation library,&rdquo; GitHub
               repository.
             </li>
+            <li>
+              P. Borodin, M. Novotni, and R. Klein, &ldquo;Progressive Gap Closing for Mesh
+              Repairing,&rdquo; in <em>Advances in Modelling, Animation and Rendering</em>, 2002.
+            </li>
+            <li>
+              A. Guéziec, G. Taubin, F. Lazarus, and B. Horn, &ldquo;Cutting and Stitching: Converting
+              Sets of Polygons to Manifold Surfaces,&rdquo; <em>IEEE Trans. Vis. Comput. Graphics</em>,
+              vol. 7, no. 2, 2001.
+            </li>
+            <li>
+              J. C. Carr et al., &ldquo;Reconstruction and Representation of 3D Objects with Radial
+              Basis Functions,&rdquo; in <em>Proc. ACM SIGGRAPH</em>, 2001.
+            </li>
+            <li>
+              J. Branch, F. Prieto, and P. Boulanger, &ldquo;Automatic Hole-Filling of Triangular
+              Meshes Using Local RBF Interpolation,&rdquo; in <em>Proc. 3DPVT</em>, 2006.
+            </li>
           </ol>
         </Section>
       </article>
@@ -477,9 +528,11 @@ function Pipeline() {
     { label: '파일 로드', detail: 'GLB · OBJ · STL · PLY를 하나의 삼각형 목록으로' },
     { label: '정점 용접', detail: '공간 해시로 좌표가 같은 정점 병합' },
     { label: '법선 방향 통일', detail: '이웃 면끼리 감는 방향 전파' },
+    { label: '비다양체 분리', detail: '면이 셋 이상인 에지를 시트마다 찢음' },
+    { label: '갭 클로징', detail: '열린 테두리 끝점을 가까운 끝점·에지에 붙임' },
     { label: '위상 분석', detail: 'half-edge로 경계·비다양체·연결 요소 집계' },
-    { label: '테두리 추적', detail: '짝 없는 half-edge를 이어 구멍 루프 복원' },
-    { label: '구멍 분류', detail: '둘레 · 평면성 · 방향으로 전략 배정' },
+    { label: '테두리 추적', detail: '면이 하나인 에지를 이어 메울 구멍만 복원' },
+    { label: '구멍 분류', detail: '둘레 · 평면성 · 방향으로 전략 배정. 핀홀은 붕괴' },
   ];
 
   return (
@@ -514,19 +567,19 @@ function Pipeline() {
               뚜껑이 또 다른 틈을 남기면 남지 않을 때까지 반복
             </div>
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {['단일 삼각형', '부채꼴', '평면 투영', 'Liepa DP', '바닥 받침'].map((name) => (
+              {['단일 삼각형', '부채꼴', '평면 투영', 'Liepa 세분', '바닥 받침', '미세 붕괴'].map((name) => (
                 <Badge key={name} tone="patch">
                   {name}
                 </Badge>
               ))}
             </div>
           </div>
-          <span className="ml-auto font-mono text-[10px] text-ink-700 mt-1">07</span>
+          <span className="ml-auto font-mono text-[10px] text-ink-700 mt-1">09</span>
         </div>
 
         {[
-          { label: '바깥 방향 정렬', detail: '껍질별 부호 있는 부피로 안팎 판정', n: '08' },
-          { label: '검증 및 채점', detail: '밀폐 · 다양체 · 관통 검사 후 100점 환산', n: '09' },
+          { label: '바깥 방향 정렬', detail: '껍질별 부호 있는 부피로 안팎 판정', n: '10' },
+          { label: '검증 및 채점', detail: '밀폐 · 다양체 · 관통 검사 후 100점 환산', n: '11' },
         ].map((stage, index, arr) => (
           <div key={stage.label} className="flex gap-4">
             <div className="flex flex-col items-center shrink-0">
