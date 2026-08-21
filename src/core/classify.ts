@@ -19,9 +19,11 @@ export type CapStrategy =
   | 'fan' // 중심점 부채꼴
   | 'planar' // 최적 평면에 투영 후 earcut
   | 'liepa' // 최소 이면각·면적 동적계획 삼각화
+  | 'front' // Zhao식 전진 전면. 중형 비평면·열린 사슬
+  | 'wrap' // 로컬 복셀 랩. 로컬 삼각화가 버거운 큰 구멍·남은 테두리
   | 'flatBase' // 바닥 개구부를 평평한 받침으로 마감
   | 'collapse' // 아주 작은 구멍을 한 점으로 모은다
-  | 'skip'; // 닫히지 않아 안전하게 메울 수 없음
+  | 'skip'; // 끝까지 못 메운 최후 수단
 
 export interface ClassifyOptions {
   upAxis?: UpAxis;
@@ -31,6 +33,16 @@ export interface ClassifyOptions {
   planarityThreshold?: number;
   /** Liepa 삼각화를 시도할 최대 정점 수. O(n^3)이라 상한이 필요하다. */
   liepaMaxVertices?: number;
+  /**
+   * 전진 전면을 시도할 최대 정점 수.
+   * 이보다 큰 비평면 구멍은 로컬 복셀 랩으로 넘긴다.
+   */
+  frontMaxVertices?: number;
+  /**
+   * 열린 사슬 양 끝 거리가 국소 평균 에지의 이 배수 이하면
+   * 가상 에지로 닫힌 루프처럼 분류한다.
+   */
+  virtualCloseEdgeMultiple?: number;
   /** bbox 대각선 대비 이 비율보다 둘레가 길어야 바닥 받침 후보가 된다. */
   flatBaseMinRelativeSize?: number;
   /** 바닥 받침으로 처리하지 않고 일반 구멍으로 둘 때 사용한다. */
@@ -81,6 +93,8 @@ export const DEFAULT_CLASSIFY_OPTIONS: Required<Omit<ClassifyOptions, 'upAxis' |
   fanMaxVertices: 8,
   planarityThreshold: 0.06,
   liepaMaxVertices: 250,
+  frontMaxVertices: 400,
+  virtualCloseEdgeMultiple: 4,
   flatBaseMinRelativeSize: 0.04,
   disableFlatBase: false,
   collapseMaxRelativeSize: 0.008,
@@ -147,7 +161,16 @@ export function classifyLoops(
       centroid[upIndex] <= bottomBand &&
       relativeSize >= opts.flatBaseMinRelativeSize;
 
-    const strategy = pickStrategy(loop, points.length, planarity, bottomFacing, relativeSize, perimeter, meanEdgeLength, opts);
+    const strategy = pickStrategy(
+      loop,
+      points,
+      planarity,
+      bottomFacing,
+      relativeSize,
+      perimeter,
+      meanEdgeLength,
+      opts,
+    );
 
     return {
       id,
@@ -167,7 +190,7 @@ export function classifyLoops(
 
 function pickStrategy(
   loop: BoundaryLoop,
-  n: number,
+  points: Vec3[],
   planarity: number,
   bottomFacing: boolean,
   relativeSize: number,
@@ -175,8 +198,19 @@ function pickStrategy(
   meanEdge: number,
   opts: typeof DEFAULT_CLASSIFY_OPTIONS,
 ): CapStrategy {
-  if (!loop.closed || n < 3) return 'skip';
+  const n = points.length;
+  if (n < 3) return 'skip';
+
+  const treatClosed = loop.closed || canVirtualClose(points, meanEdge, opts.virtualCloseEdgeMultiple);
+
   if (opts.forceStrategy) return n === 3 ? 'single' : opts.forceStrategy;
+
+  if (!treatClosed) {
+    // 끝점이 멀어도 사슬을 따라 전면을 전진시킨다. skip은 최후 수단만.
+    if (n <= opts.frontMaxVertices) return 'front';
+    return 'wrap';
+  }
+
   if (bottomFacing) return 'flatBase';
   if (
     n <= opts.collapseMaxVertices &&
@@ -187,9 +221,34 @@ function pickStrategy(
     return 'collapse';
   }
   if (n === 3) return 'single';
-  if (n <= opts.fanMaxVertices) return 'fan';
-  if (planarity < opts.planarityThreshold) return 'planar';
-  // O(n^3)이라 큰 루프는 평면 투영으로 넘긴다. 품질보다 응답성을 우선한다.
+
+  const planar = planarity < opts.planarityThreshold;
+  if (n <= opts.fanMaxVertices) {
+    // 작은 구멍도 휘어 있으면 원뿔 부채꼴 대신 곡면 삼각화.
+    if (planar) return 'fan';
+    return n <= opts.liepaMaxVertices ? 'liepa' : 'front';
+  }
+  if (planar) return 'planar';
+  // 닫힌 비평면은 Liepa가 버틸 때까지 쓰고, 그 다음 전면, 그 다음 랩.
   if (n <= opts.liepaMaxVertices) return 'liepa';
-  return 'planar';
+  if (n <= opts.frontMaxVertices) return 'front';
+  return 'wrap';
+}
+
+/**
+ * 열린 사슬의 양 끝이 국소 에지 몇 배 안이면 가상 에지로 닫아
+ * 기존 닫힌 구멍 전략을 그대로 쓸 수 있다.
+ */
+export function canVirtualClose(points: Vec3[], meanEdge: number, multiple: number): boolean {
+  if (points.length < 3) return false;
+  const gap = length(sub(points[0], points[points.length - 1]));
+  let local = meanEdge;
+  if (local <= 0) {
+    let sum = 0;
+    for (let i = 0; i + 1 < points.length; i++) {
+      sum += length(sub(points[i + 1], points[i]));
+    }
+    local = sum / Math.max(1, points.length - 1);
+  }
+  return local > 0 && gap <= multiple * local;
 }

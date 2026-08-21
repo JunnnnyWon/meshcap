@@ -45,6 +45,13 @@ export interface CapContext {
   edgeFaceCount?: (a: number, b: number) => number;
   /** 정점마다 접한 에지의 평균 길이. Liepa 세분이 주변 밀도를 맞출 때 쓴다. */
   vertexMeanEdge?: Float32Array;
+  /**
+   * true면 면이 둘인 에지가 하나라도 있으면 패치 전체를 버린다.
+   * 시각 부착 모드(기본)에서는 문제 삼각형만 건너뛴다.
+   */
+  strictManifold?: boolean;
+  /** 로컬 복셀 랩 격자 한 변. 브라우저 96, 서버 160. */
+  wrapResolution?: number;
 }
 
 export const EMPTY_PATCH: CapPatch = { newPositions: [], triangles: [] };

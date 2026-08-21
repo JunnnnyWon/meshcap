@@ -46,6 +46,8 @@ export interface ViewerMeshInput {
   capTriangleStart: number;
   /** before 메시 기준의 구멍 테두리 정점 인덱스 목록. */
   loops: number[][];
+  /** after 메시에 남은 1-face 에지. 2정점 사슬 포함. */
+  remainingEdges?: number[][];
   upAxis: UpAxis;
 }
 
@@ -61,6 +63,7 @@ export class MeshViewer {
   private beforeWire: Mesh | null = null;
   private afterWire: Mesh | null = null;
   private holeLines: LineSegments2 | null = null;
+  private remainingLines: LineSegments2 | null = null;
   private grid: GridHelper | null = null;
 
   private surfaceMaterial: MeshStandardMaterial;
@@ -192,6 +195,8 @@ export class MeshViewer {
 
     this.holeLines = buildLoopLines(input.before, input.loops, this.holeMaterial);
     if (this.holeLines) this.content.add(this.holeLines);
+    this.remainingLines = buildLoopLines(input.after, input.remainingEdges ?? [], this.holeMaterial);
+    if (this.remainingLines) this.content.add(this.remainingLines);
 
     this.grid = buildBedGrid(bounds, AXIS_INDEX[input.upAxis]);
     this.scene.add(this.grid);
@@ -218,6 +223,7 @@ export class MeshViewer {
 
   setHolesVisible(visible: boolean): void {
     if (this.holeLines) this.holeLines.visible = visible && this.mode === 'before';
+    if (this.remainingLines) this.remainingLines.visible = visible && this.mode === 'after';
   }
 
   /** 특정 구멍이 화면 가운데 오도록 카메라를 이동시킨다. */
@@ -309,6 +315,7 @@ export class MeshViewer {
     if (this.beforeWire) this.beforeWire.visible = before && this.wireframe;
     if (this.afterWire) this.afterWire.visible = !before && this.wireframe;
     if (this.holeLines) this.holeLines.visible = before;
+    if (this.remainingLines) this.remainingLines.visible = !before;
   }
 
   private clearContent(): void {
@@ -331,6 +338,7 @@ export class MeshViewer {
     this.beforeWire = null;
     this.afterWire = null;
     this.holeLines = null;
+    this.remainingLines = null;
   }
 
   private animate = (): void => {

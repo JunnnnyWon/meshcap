@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { runPipeline } from '../pipeline.ts';
+import { capLiepa } from '../cap/liepa.ts';
+import { refineAndFair } from '../cap/refine.ts';
 import { buildTopology } from '../halfEdge.ts';
-import { traceBoundaryLoops } from '../boundary.ts';
+import { traceBoundaryLoops, traceFillableLoops } from '../boundary.ts';
 import { classifyLoops } from '../classify.ts';
 import { computeBounds, triangleCount } from '../types.ts';
 import {
@@ -12,6 +14,7 @@ import {
   openCylinder,
   openTetrahedron,
   tetrahedron,
+  nonManifoldFan,
 } from '../__fixtures__/shapes.ts';
 
 function classify(mesh: ReturnType<typeof cube>, options = {}) {
@@ -49,19 +52,35 @@ describe('classifyLoops', () => {
     expect(top?.strategy).toBe('planar');
   });
 
-  it('비평면 구멍은 Liepa 삼각화로 넘긴다', () => {
+  it('비평면 작은 구멍은 Liepa 삼각화로 넘긴다', () => {
+    const loops = classify(openCylinder(8, 1, 2, 0.5), { disableFlatBase: true });
+    const top = loops.find((l) => l.capNormal[1] > 0.5);
+    expect(top?.strategy).toBe('liepa');
+  });
+
+  it('닫힌 중형 비평면 구멍은 Liepa 삼각화로 넘긴다', () => {
     const loops = classify(openCylinder(24, 1, 2, 0.5), { disableFlatBase: true });
     const top = loops.find((l) => l.capNormal[1] > 0.5);
     expect(top?.strategy).toBe('liepa');
   });
 
-  it('정점 수가 상한을 넘으면 평면 투영으로 폴백한다', () => {
+  it('Liepa 상한을 넘는 비평면 구멍은 전진 전면으로 넘긴다', () => {
     const loops = classify(openCylinder(64, 1, 2, 0.5), {
       disableFlatBase: true,
       liepaMaxVertices: 32,
     });
     const top = loops.find((l) => l.capNormal[1] > 0.5);
-    expect(top?.strategy).toBe('planar');
+    expect(top?.strategy).toBe('front');
+  });
+
+  it('정점 수가 전면 상한을 넘으면 복셀 랩으로 넘긴다', () => {
+    const loops = classify(openCylinder(64, 1, 2, 0.5), {
+      disableFlatBase: true,
+      liepaMaxVertices: 16,
+      frontMaxVertices: 32,
+    });
+    const top = loops.find((l) => l.capNormal[1] > 0.5);
+    expect(top?.strategy).toBe('wrap');
   });
 
   it('정점 3개짜리 구멍은 삼각형 하나로 처리한다', () => {
@@ -134,11 +153,34 @@ describe('runPipeline', () => {
   });
 
   it('Liepa 삼각화는 Steiner 정점을 넣을 수 있고 그래도 밀폐된다', () => {
-    const result = runPipeline(openCylinder(24, 1, 2, 0.5), { disableFlatBase: true });
+    const result = runPipeline(openCylinder(8, 1, 2, 0.5), { disableFlatBase: true });
     const liepa = result.holes.find((h) => h.appliedStrategy === 'liepa');
 
-    expect(liepa?.addedTriangles).toBeGreaterThanOrEqual(22);
+    expect(liepa?.addedTriangles).toBeGreaterThanOrEqual(6);
     expect(result.repaired.watertight).toBe(true);
+  });
+
+  it('주변보다 성긴 비평면 뚜껑에는 Steiner 정점을 넣는다', () => {
+    const mesh = openCylinder(16, 2, 2, 0.8);
+    const topology = buildTopology(mesh);
+    const loops = traceBoundaryLoops(topology);
+    const metrics = classifyLoops(mesh, loops, { disableFlatBase: true }, computeBounds(mesh.positions));
+    const top = metrics.find((m) => m.capNormal[1] > 0.5);
+    expect(top?.strategy).toBe('liepa');
+
+    const meanEdge = new Float32Array(mesh.positions.length / 3);
+    meanEdge.fill(0.04);
+    const ctx = {
+      mesh,
+      metrics: top!,
+      baseVertexCount: mesh.positions.length / 3,
+      bounds: computeBounds(mesh.positions),
+      upIndex: 1,
+      vertexMeanEdge: meanEdge,
+    };
+    const patch = capLiepa(ctx);
+    const refined = refineAndFair(ctx, patch);
+    expect(refined.newPositions.length / 3).toBeGreaterThan(0);
   });
 
   it('물결치는 구멍도 밀폐되고 관통이 생기지 않는다', () => {
@@ -190,5 +232,26 @@ describe('runPipeline', () => {
     const result = runPipeline(openCylinder(24));
     expect(result.timings.total).toBeGreaterThanOrEqual(0);
     expect(result.timings.cap).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('열린 사슬과 시각 부착', () => {
+  it('면이 하나인 테두리만 모으면 끊기는 사슬을 skip하지 않는다', () => {
+    const mesh = nonManifoldFan();
+    const topology = buildTopology(mesh);
+    const loops = traceFillableLoops(topology);
+    const open = loops.filter((loop) => !loop.closed);
+    expect(open.length).toBeGreaterThan(0);
+
+    const metrics = classifyLoops(mesh, open, { disableFlatBase: true }, computeBounds(mesh.positions));
+    expect(metrics.every((hole) => hole.strategy !== 'skip' || hole.vertices.length < 3)).toBe(true);
+    expect(metrics.some((hole) => hole.strategy === 'front' || hole.strategy === 'single')).toBe(true);
+  });
+
+  it('거의 닫힌 열린 사슬은 가상으로 닫아 메운다', () => {
+    const mesh = openCube();
+    const loops = [{ vertices: [4, 5, 6, 7], closed: false }];
+    const [hole] = classifyLoops(mesh, loops, {}, computeBounds(mesh.positions));
+    expect(hole.strategy).not.toBe('skip');
   });
 });

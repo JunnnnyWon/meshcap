@@ -4,6 +4,15 @@ import { length, sub, vertexAt } from './geom.ts';
 
 const MAX_INCIDENT = 255;
 
+/** 면이 둘 미만인 에지가 둘 이상이면 보이는 찢김을 닫는 삼각형이다. */
+export function closesVisibleTear(ab: number, bc: number, ca: number): boolean {
+  let open = 0;
+  if (ab < 2) open++;
+  if (bc < 2) open++;
+  if (ca < 2) open++;
+  return open >= 2;
+}
+
 function growUint32(source: Uint32Array, size: number): Uint32Array {
   const grown = new Uint32Array(size);
   grown.set(source);
@@ -71,6 +80,15 @@ export class EdgeIncidence {
   wouldCreateNonManifold(a: number, b: number, c: number): boolean {
     if (a === b || b === c || c === a) return true;
     return this.count(a, b) >= 2 || this.count(b, c) >= 2 || this.count(c, a) >= 2;
+  }
+
+  /**
+   * 보이는 찢김을 메우는지. 면이 아직 둘 미만인 에지가 둘 이상이면
+   * 나머지 한 변이 이미 둘여도 그 삼각형은 테두리를 줄인다.
+   */
+  wouldCloseVisibleTear(a: number, b: number, c: number): boolean {
+    if (a === b || b === c || c === a) return false;
+    return closesVisibleTear(this.count(a, b), this.count(b, c), this.count(c, a));
   }
 
   addTriangle(a: number, b: number, c: number): void {

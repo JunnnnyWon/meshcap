@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { runPipeline } from '../pipeline.ts';
 import { buildTopology } from '../halfEdge.ts';
 import { traceBoundaryLoops } from '../boundary.ts';
-import { cube, nonManifoldFan } from '../__fixtures__/shapes.ts';
+import { cube, nonManifoldFan, openCylinder } from '../__fixtures__/shapes.ts';
 import { proceduralSample } from '../../samples/index.ts';
 
 const bust = proceduralSample('bust');
@@ -23,7 +23,14 @@ describe('합성 샘플 회귀', () => {
 
     expect(result.repaired.watertight).toBe(true);
     expect(result.holes).toHaveLength(2);
+    expect(result.holes.every((hole) => hole.appliedStrategy !== 'skip')).toBe(true);
     expect(result.repairedScore.total).toBe(100);
+  });
+
+  it('비평면 합성 구멍에는 Steiner 정점이 들어간다', () => {
+    const result = runPipeline(openCylinder(16, 2, 2, 0.8), { disableFlatBase: true });
+    expect(result.holes.some((hole) => hole.planarity >= 0.06)).toBe(true);
+    expect(result.repaired.watertight).toBe(true);
   });
 });
 

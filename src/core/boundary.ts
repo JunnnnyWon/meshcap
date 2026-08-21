@@ -91,8 +91,23 @@ export function traceBoundaryLoops(topology: Topology): BoundaryLoop[] {
 /**
  * 면이 하나인 에지만으로 구멍을 복원한다. 비다양체 잉여는 메우지 않는다.
  */
-export function traceFillableLoops(topology: Topology): BoundaryLoop[] {
-  return collectLoops(topology.vertexCount, topology.fillFrom, topology.fillTo, 3);
+export function traceFillableLoops(topology: Topology, minLength = 3): BoundaryLoop[] {
+  return collectLoops(topology.vertexCount, topology.fillFrom, topology.fillTo, minLength);
+}
+
+/** 면이 하나인 에지를 정점 둘짜리 사슬로 돌려, 루프에 안 잡힌 찢김도 그린다. */
+export function listFillableEdges(topology: Topology): number[][] {
+  const edges: number[][] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < topology.fillFrom.length; i++) {
+    const a = topology.fillFrom[i];
+    const b = topology.fillTo[i];
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edges.push([a, b]);
+  }
+  return edges;
 }
 
 function collectLoops(

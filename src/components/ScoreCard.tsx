@@ -14,6 +14,9 @@ export function ScoreCard({ before, after }: { before: PrintabilityScore; after:
   return (
     <section className="border-b border-ink-800 px-4 py-4">
       <h2 className="label-caps mb-3">출력해도 되는지</h2>
+      <p className="text-[12px] leading-relaxed text-ink-400 mb-3">
+        막힘 점수보다 찢어진 자리가 주변 곡면에 이어져 보이는지가 먼저입니다. 점수는 진단용입니다.
+      </p>
 
       <div className="flex items-end gap-4 mb-4">
         <div>

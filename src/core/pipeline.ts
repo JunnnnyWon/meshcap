@@ -1,6 +1,7 @@
 import { weldVertices, type WeldOptions } from './weld.ts';
 import { buildTopology } from './halfEdge.ts';
 import { traceFillableLoops } from './boundary.ts';
+import { listDrawnLeftoverEdges } from './leftoverSurgery.ts';
 import {
   classifyLoops,
   DEFAULT_CLASSIFY_OPTIONS,
@@ -9,6 +10,8 @@ import {
   type LoopMetrics,
 } from './classify.ts';
 import { applyCap } from './cap/index.ts';
+import { wrapLoops, wrapBoundaryClusters, BROWSER_WRAP_RESOLUTION } from './cap/voxelWrap.ts';
+import { bridgeLeftoverTears } from './bridge.ts';
 import { orientOutward } from './normals.ts';
 import { validateMesh, type ValidationReport } from './validate.ts';
 import { scorePrintability, type PrintabilityScore } from './score.ts';
@@ -16,8 +19,9 @@ import { computeBounds, type MeshData } from './types.ts';
 import { normalize, triangleNormalRaw, vertexAt, type Vec3 } from './geom.ts';
 import { computeVertexMeanEdge, EdgeIncidence } from './incidence.ts';
 import { splitNonManifold } from './splitNonManifold.ts';
-import { closeGaps } from './gapClose.ts';
+import { closeGaps, zipLeftoverSlits } from './gapClose.ts';
 import { canCollapse, collapseMicroHoles } from './collapse.ts';
+import { attachToExistingSurface, dropOverlappingFlaps } from './surfaceSnap.ts';
 
 export interface PipelineOptions extends ClassifyOptions {
   weld?: WeldOptions;
@@ -30,6 +34,15 @@ export interface PipelineOptions extends ClassifyOptions {
   flatBaseOffsetRatio?: number;
   /** 뚜껑을 붙이고 남은 틈을 다시 메우는 최대 반복 횟수. */
   maxCapPasses?: number;
+  /**
+   * true면 면이 둘인 대각선이 하나라도 있으면 패치 전체를 버린다.
+   * 기본(시각 부착)은 문제 삼각형만 건너뛴다.
+   */
+  strictManifold?: boolean;
+  /** 로컬 복셀 랩 격자 한 변. 브라우저 기본 96, 서버는 160. */
+  wrapResolution?: number;
+  /** 로컬 채움 뒤 남은 테두리 랩을 끈다. 절제 실험용. */
+  disableWrap?: boolean;
 }
 
 const DEFAULT_MAX_CAP_PASSES = 4;
@@ -78,6 +91,8 @@ export interface PipelineResult {
   /** 용접만 끝난 메시. Before/After 비교에 쓴다. */
   weldedMesh: MeshData;
   holes: HoleReport[];
+  /** 보정 뒤에도 남은 1-face 에지. 루프가 안 되는 2정점 찢김 포함. */
+  remainingFillEdges: number[][];
   /** 이 인덱스부터가 새로 만든 삼각형이다. */
   capTriangleStart: number;
   /** 구멍 메우기를 몇 번 반복했는지. 2 이상이면 뚜껑이 또 다른 틈을 남겼다는 뜻이다. */
@@ -96,6 +111,29 @@ export interface PipelineResult {
     gapMergedPairs: number;
     gapSnappedToEdge: number;
     collapsedHoles: number;
+    bridgedTriangles: number;
+    wrappedTriangles: number;
+    collapsedSlits: number;
+    snappedToInterior: number;
+    deletedFlaps: number;
+    snappedTJunctions: number;
+    zippedCracks: number;
+    collapsedShort: number;
+    overlapReplaces: number;
+    cavityCommits: number;
+    spatialZipCommits: number;
+    subsegmentZipCommits: number;
+    polylineZipCommits: number;
+    sliverCutCommits: number;
+    insertCommits: number;
+    stripCommits: number;
+    stripMultiCommits: number;
+    stripFarCommits: number;
+    leftoverZipCommits: number;
+    sheetSplitCommits: number;
+    stripBowCommits: number;
+    chainRecapCommits: number;
+    stripBudgetHit: boolean;
   };
   orientSummary: {
     flippedTriangles: number;
@@ -173,6 +211,29 @@ export function runPipeline(
     gapMergedPairs: 0,
     gapSnappedToEdge: 0,
     collapsedHoles: 0,
+    bridgedTriangles: 0,
+    wrappedTriangles: 0,
+    collapsedSlits: 0,
+    snappedToInterior: 0,
+    deletedFlaps: 0,
+    snappedTJunctions: 0,
+    zippedCracks: 0,
+    collapsedShort: 0,
+    overlapReplaces: 0,
+    cavityCommits: 0,
+    spatialZipCommits: 0,
+    subsegmentZipCommits: 0,
+    polylineZipCommits: 0,
+    sliverCutCommits: 0,
+    insertCommits: 0,
+    stripCommits: 0,
+    stripMultiCommits: 0,
+    stripFarCommits: 0,
+    leftoverZipCommits: 0,
+    sheetSplitCommits: 0,
+    stripBowCommits: 0,
+    chainRecapCommits: 0,
+    stripBudgetHit: false,
   };
 
   stage('prepare');
@@ -187,6 +248,10 @@ export function runPipeline(
     repairedMesh = gap.mesh;
     repairSummary.gapMergedPairs = gap.mergedPairs;
     repairSummary.gapSnappedToEdge = gap.snappedToEdge;
+
+    const flaps = dropOverlappingFlaps(repairedMesh);
+    repairedMesh = flaps.mesh;
+    repairSummary.deletedFlaps = flaps.count;
   }
   const prepareEnd = now();
 
@@ -259,7 +324,9 @@ export function runPipeline(
 
       const fillable = passMetrics
         .map(fillStrategy)
-        .filter((metric) => metric.strategy !== 'skip' && metric.strategy !== 'collapse');
+        .filter((metric) => metric.strategy !== 'skip' && metric.strategy !== 'collapse')
+        // 작은 1-face 사슬을 먼저 붙여, 큰 패치가 공유 에지를 선점하지 않게 한다.
+        .sort((a, b) => a.vertices.length - b.vertices.length);
       if (fillable.length === 0) break;
 
       const extraPositions: number[] = [];
@@ -283,6 +350,8 @@ export function runPipeline(
           commitTriangle: (a, b, c) => incidence.addTriangle(a, b, c),
           edgeFaceCount: (a, b) => incidence.count(a, b),
           vertexMeanEdge,
+          strictManifold: options.strictManifold === true,
+          wrapResolution: options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
         });
 
         appendAll(extraPositions, outcome.newPositions);
@@ -297,13 +366,17 @@ export function runPipeline(
 
       if (extraTriangles.length === 0) break;
 
-      repairedMesh = {
+      const trial: MeshData = {
         positions: concatFloat32(repairedMesh.positions, extraPositions),
         indices: concatUint32(repairedMesh.indices, extraTriangles),
       };
-      capPasses++;
+      const trialTopology = buildTopology(trial);
+      // 구멍 개수가 아니라 보이는 1-face 테두리가 줄었는지로 회차를 판단한다.
+      if (trialTopology.boundaryEdgeCount >= passTopology.boundaryEdgeCount) break;
 
-      passTopology = buildTopology(repairedMesh);
+      repairedMesh = trial;
+      capPasses++;
+      passTopology = trialTopology;
       if (passTopology.boundaryEdgeCount === 0) break;
 
       const nextIncidence = new EdgeIncidence(repairedMesh);
@@ -315,10 +388,36 @@ export function runPipeline(
         nextIncidence.meanLength,
       );
       downgradeInvalidCollapses(nextMetrics, nextIncidence);
-      // 더 줄지 않으면 같은 자리를 맴돌고 있는 것이므로 멈춘다.
-      if (nextMetrics.length >= passMetrics.length) break;
       passMetrics = nextMetrics;
     }
+
+    const leftover = attachLeftoverTears(repairedMesh, bounds, options);
+    repairedMesh = leftover.mesh;
+    repairSummary.bridgedTriangles = leftover.bridgedTriangles;
+    repairSummary.wrappedTriangles = leftover.wrappedTriangles;
+    repairSummary.collapsedSlits = leftover.collapsedSlits;
+    repairSummary.snappedToInterior = leftover.snappedToInterior;
+    repairSummary.deletedFlaps += leftover.deletedFlaps;
+    repairSummary.snappedTJunctions = leftover.snappedTJunctions;
+    repairSummary.zippedCracks = leftover.zippedCracks;
+    repairSummary.collapsedShort = leftover.collapsedShort;
+    repairSummary.overlapReplaces = leftover.overlapReplaces;
+    repairSummary.cavityCommits = leftover.cavityCommits;
+    repairSummary.spatialZipCommits = leftover.spatialZipCommits;
+    repairSummary.subsegmentZipCommits = leftover.subsegmentZipCommits;
+    repairSummary.polylineZipCommits = leftover.polylineZipCommits;
+    repairSummary.sliverCutCommits = leftover.sliverCutCommits;
+    repairSummary.insertCommits = leftover.insertCommits;
+    repairSummary.stripCommits = leftover.stripCommits;
+    repairSummary.stripMultiCommits = leftover.stripMultiCommits;
+    repairSummary.stripFarCommits = leftover.stripFarCommits;
+    repairSummary.leftoverZipCommits = leftover.leftoverZipCommits;
+    repairSummary.sheetSplitCommits = leftover.sheetSplitCommits;
+    repairSummary.stripBowCommits = leftover.stripBowCommits;
+    repairSummary.chainRecapCommits = leftover.chainRecapCommits;
+    repairSummary.stripBudgetHit = leftover.stripBudgetHit;
+    if (leftover.addedPasses > 0) capPasses += leftover.addedPasses;
+    updateUnfilledHoles(holes, leftover.closedEverything, leftover.wrappedTriangles > 0);
   }
   const capEnd = now();
 
@@ -363,6 +462,7 @@ export function runPipeline(
     // 후면 컬링으로 사라져 구멍처럼 보이는 오해를 막을 수 있다.
     weldedMesh: analysisMesh,
     holes,
+    remainingFillEdges: listDrawnLeftoverEdges(repairedMesh),
     capTriangleStart,
     capPasses,
     weldSummary: {
@@ -385,6 +485,265 @@ export function runPipeline(
       total: validateEnd - t0,
     },
   };
+}
+
+function attachLeftoverTears(
+  mesh: MeshData,
+  bounds: ReturnType<typeof computeBounds>,
+  options: PipelineOptions,
+): {
+  mesh: MeshData;
+  bridgedTriangles: number;
+  wrappedTriangles: number;
+  collapsedSlits: number;
+  snappedToInterior: number;
+  deletedFlaps: number;
+  snappedTJunctions: number;
+  zippedCracks: number;
+  collapsedShort: number;
+  overlapReplaces: number;
+  cavityCommits: number;
+  spatialZipCommits: number;
+  subsegmentZipCommits: number;
+  polylineZipCommits: number;
+  sliverCutCommits: number;
+  insertCommits: number;
+  stripCommits: number;
+  stripMultiCommits: number;
+  stripFarCommits: number;
+  leftoverZipCommits: number;
+  sheetSplitCommits: number;
+  stripBowCommits: number;
+  chainRecapCommits: number;
+  stripBudgetHit: boolean;
+  addedPasses: number;
+  closedEverything: boolean;
+} {
+  let working = mesh;
+  let bridgedTriangles = 0;
+  let wrappedTriangles = 0;
+  let addedPasses = 0;
+
+  for (let cycle = 0; cycle < 3; cycle++) {
+    const before = buildTopology(working).boundaryEdgeCount;
+    if (before === 0) break;
+
+    const zipped = zipLeftoverSlits(working);
+    working = zipped.mesh;
+
+    const topology = buildTopology(working);
+    const incidence = new EdgeIncidence(working);
+    const leftover = classifyLoops(
+      working,
+      traceFillableLoops(topology),
+      options,
+      bounds,
+      incidence.meanLength,
+    )
+      .map(fillStrategy)
+      .filter((metric) => metric.strategy !== 'skip' && metric.strategy !== 'collapse')
+      .sort((a, b) => a.vertices.length - b.vertices.length);
+
+    if (leftover.length > 0) {
+      const extraPositions: number[] = [];
+      const extraTriangles: number[] = [];
+      const lookup = buildBoundaryFaceLookup(topology, working.positions.length / 3);
+      const vertexMeanEdge = computeVertexMeanEdge(working);
+      const baseCount = working.positions.length / 3;
+      const upIndex = AXIS_INDEX[options.upAxis ?? DEFAULT_CLASSIFY_OPTIONS.upAxis];
+      for (const metric of leftover) {
+        const outcome = applyCap({
+          mesh: working,
+          metrics: metric,
+          baseVertexCount: baseCount + extraPositions.length / 3,
+          bounds,
+          upIndex,
+          adjacentNormals: collectAdjacentNormals(working, metric, lookup),
+          flatBaseOffsetRatio: options.flatBaseOffsetRatio,
+          edgeExists: (a, b) => incidence.count(a, b) > 0,
+          wouldCreateNonManifold: (a, b, c) => incidence.wouldCreateNonManifold(a, b, c),
+          commitTriangle: (a, b, c) => incidence.addTriangle(a, b, c),
+          edgeFaceCount: (a, b) => incidence.count(a, b),
+          vertexMeanEdge,
+          strictManifold: options.strictManifold === true,
+          wrapResolution: options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+        });
+        appendAll(extraPositions, outcome.newPositions);
+        appendAll(extraTriangles, outcome.triangles);
+      }
+      if (extraTriangles.length > 0) {
+        const trial: MeshData = {
+          positions: concatFloat32(working.positions, extraPositions),
+          indices: concatUint32(working.indices, extraTriangles),
+        };
+        if (buildTopology(trial).boundaryEdgeCount < topology.boundaryEdgeCount) {
+          working = trial;
+          addedPasses++;
+        }
+      }
+    }
+
+    const bridged = bridgeLeftoverTears(working);
+    working = bridged.mesh;
+    bridgedTriangles += bridged.addedTriangles;
+    if (bridged.addedTriangles > 0) addedPasses++;
+
+    const after = buildTopology(working).boundaryEdgeCount;
+    if (after >= before) break;
+  }
+
+  if (!options.disableWrap && buildTopology(working).boundaryEdgeCount > 0) {
+    const clustered = wrapBoundaryClusters(
+      working,
+      options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+      options.strictManifold === true,
+    );
+    working = clustered.mesh;
+    wrappedTriangles += clustered.addedTriangles;
+    if (clustered.addedTriangles > 0) addedPasses++;
+
+    const leftoverLoops = classifyLoops(
+      working,
+      traceFillableLoops(buildTopology(working)),
+      options,
+      bounds,
+      new EdgeIncidence(working).meanLength,
+    ).some((metric) => metric.vertices.length >= 12);
+    if (leftoverLoops) {
+      const loopWrap = applyLeftoverWrap(working, bounds, options);
+      working = loopWrap.mesh;
+      wrappedTriangles += loopWrap.addedTriangles;
+      if (loopWrap.addedTriangles > 0) addedPasses++;
+    }
+
+    const afterWrap = bridgeLeftoverTears(working);
+    working = afterWrap.mesh;
+    bridgedTriangles += afterWrap.addedTriangles;
+  }
+
+  const surface = attachToExistingSurface(working);
+  working = surface.mesh;
+  wrappedTriangles += surface.wrappedTriangles;
+  if (surface.collapsedSlits + surface.snappedToInterior + surface.deletedFlaps + surface.snappedTJunctions + surface.zippedCracks + surface.collapsedShort + surface.overlapReplaces + surface.cavityCommits + surface.spatialZipCommits + surface.subsegmentZipCommits + surface.polylineZipCommits + surface.sliverCutCommits + surface.insertCommits + surface.stripCommits + surface.leftoverZipCommits + surface.sheetSplitCommits + surface.stripBowCommits + surface.chainRecapCommits + surface.wrappedTriangles > 0) addedPasses++;
+
+  return {
+    mesh: working,
+    bridgedTriangles,
+    wrappedTriangles,
+    collapsedSlits: surface.collapsedSlits,
+    snappedToInterior: surface.snappedToInterior,
+    deletedFlaps: surface.deletedFlaps,
+    snappedTJunctions: surface.snappedTJunctions,
+    zippedCracks: surface.zippedCracks,
+    collapsedShort: surface.collapsedShort,
+    overlapReplaces: surface.overlapReplaces,
+    cavityCommits: surface.cavityCommits,
+    spatialZipCommits: surface.spatialZipCommits,
+    subsegmentZipCommits: surface.subsegmentZipCommits,
+    polylineZipCommits: surface.polylineZipCommits,
+    sliverCutCommits: surface.sliverCutCommits,
+    insertCommits: surface.insertCommits,
+    stripCommits: surface.stripCommits,
+    stripMultiCommits: surface.stripMultiCommits,
+    stripFarCommits: surface.stripFarCommits,
+    leftoverZipCommits: surface.leftoverZipCommits,
+    sheetSplitCommits: surface.sheetSplitCommits,
+    stripBowCommits: surface.stripBowCommits,
+    chainRecapCommits: surface.chainRecapCommits,
+    stripBudgetHit: surface.stripBudgetHit,
+    addedPasses,
+    closedEverything: buildTopology(working).boundaryEdgeCount === 0,
+  };
+}
+
+function applyLeftoverWrap(
+  mesh: MeshData,
+  bounds: ReturnType<typeof computeBounds>,
+  options: PipelineOptions,
+): { mesh: MeshData; addedTriangles: number; closedEverything: boolean } {
+  const topology = buildTopology(mesh);
+  if (topology.boundaryEdgeCount === 0) {
+    return { mesh, addedTriangles: 0, closedEverything: true };
+  }
+
+  const incidence = new EdgeIncidence(mesh);
+  const leftover = classifyLoops(
+    mesh,
+    traceFillableLoops(topology),
+    options,
+    bounds,
+    incidence.meanLength,
+  )
+    .filter((metric) => metric.vertices.length >= 3 && metric.strategy !== 'collapse')
+    .sort((a, b) => b.perimeter - a.perimeter)
+    .slice(0, 80);
+
+  if (leftover.length === 0) {
+    return { mesh, addedTriangles: 0, closedEverything: topology.boundaryEdgeCount === 0 };
+  }
+
+  const wrapTargets = leftover.map((metric) => ({ ...metric, strategy: 'wrap' as const }));
+  const targetOneFaceBefore = countOneFaceLoopEdges(wrapTargets, (a, b) => incidence.count(a, b));
+  const patch = wrapLoops(
+    mesh,
+    wrapTargets,
+    options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+    mesh.positions.length / 3,
+    (a, b) => incidence.count(a, b),
+    options.strictManifold === true ? (a, b, c) => incidence.wouldCreateNonManifold(a, b, c) : undefined,
+    (a, b, c) => incidence.addTriangle(a, b, c),
+  );
+
+  if (patch.triangles.length === 0) {
+    return { mesh, addedTriangles: 0, closedEverything: false };
+  }
+
+  const next: MeshData = {
+    positions: concatFloat32(mesh.positions, patch.newPositions),
+    indices: concatUint32(mesh.indices, patch.triangles),
+  };
+  const after = buildTopology(next);
+  const afterIncidence = new EdgeIncidence(next);
+  const targetOneFaceAfter = countOneFaceLoopEdges(wrapTargets, (a, b) => afterIncidence.count(a, b));
+  // 면이 하나인 테두리가 줄면 받아들인다. 짝을 못 맞춘 half-edge 총량이
+  // 늘어도(비다양체·방향 불일치) 보이는 찢김이 줄면 유지한다.
+  const oneFaceReduced = after.boundaryEdgeCount < topology.boundaryEdgeCount;
+  const targetReduced =
+    targetOneFaceAfter < targetOneFaceBefore &&
+    after.boundaryEdgeCount <= topology.boundaryEdgeCount + Math.max(8, targetOneFaceBefore - targetOneFaceAfter);
+  if (!oneFaceReduced && !targetReduced) {
+    return { mesh, addedTriangles: 0, closedEverything: false };
+  }
+  return {
+    mesh: next,
+    addedTriangles: patch.triangles.length / 3,
+    closedEverything: after.boundaryEdgeCount === 0,
+  };
+}
+
+function countOneFaceLoopEdges(
+  loops: LoopMetrics[],
+  faceCount: (a: number, b: number) => number,
+): number {
+  let n = 0;
+  for (const loop of loops) {
+    const v = loop.vertices;
+    const last = loop.closed ? v.length : Math.max(0, v.length - 1);
+    for (let i = 0; i < last; i++) {
+      if (faceCount(v[i], v[(i + 1) % v.length]) === 1) n++;
+    }
+  }
+  return n;
+}
+
+function updateUnfilledHoles(holes: HoleReport[], closedEverything: boolean, wrapped: boolean): void {
+  if (!wrapped || !closedEverything) return;
+  for (const hole of holes) {
+    if (hole.addedTriangles > 0) continue;
+    if (hole.appliedStrategy === 'collapse') continue;
+    hole.appliedStrategy = 'wrap';
+    hole.fellBack = hole.plannedStrategy !== 'wrap';
+  }
 }
 
 function toHoleReport(

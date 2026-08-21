@@ -248,6 +248,7 @@ export function ToolPage() {
       after: result.mesh,
       capTriangleStart: result.capTriangleStart,
       loops: result.holes.map((hole) => hole.loop),
+      remainingEdges: result.remainingFillEdges,
       upAxis,
     };
   }, [result, upAxis]);
@@ -327,9 +328,14 @@ export function ToolPage() {
             <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '원래 면의 선' : '기존 표면'} />
           </div>
         )}
-        {mode === 'after' && result && result.capTriangleStart < result.repaired.triangleCount && (
+        {mode === 'after' && result && (result.capTriangleStart < result.repaired.triangleCount || result.remainingFillEdges.length > 0) && (
           <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2 pointer-events-none">
-            <LegendDot color="#5eead4" label={wireframe ? '메운 면의 선' : '새로 만든 면'} />
+            {result.capTriangleStart < result.repaired.triangleCount && (
+              <LegendDot color="#5eead4" label={wireframe ? '메운 면의 선' : '새로 만든 면'} />
+            )}
+            {result.remainingFillEdges.length > 0 && (
+              <LegendDot color="#ff4d4f" label="남은 테두리" />
+            )}
             <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '원래 면의 선' : '기존 표면'} />
           </div>
         )}

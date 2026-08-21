@@ -85,7 +85,11 @@ const server = createServer(async (req, res) => {
     const { mesh, options } = decodeRepairRequest(buffer);
     const triangles = mesh.indices.length / 3;
 
-    const result = runPipeline(mesh, options);
+    // 브라우저는 96³, 서버는 같은 코어에 랩 해상도만 높인다.
+    const result = runPipeline(mesh, {
+      ...options,
+      wrapResolution: options.wrapResolution ?? 160,
+    });
     const payload = encodeRepairResponse(result);
 
     res.writeHead(200, {

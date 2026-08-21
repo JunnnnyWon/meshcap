@@ -3,7 +3,7 @@ import { mergeVertexGroups } from './compact.ts';
 import { hash3, IntHashTable } from './intHash.ts';
 import { buildTopology } from './halfEdge.ts';
 import { EdgeIncidence } from './incidence.ts';
-import { dot, normalize, sub, triangleNormalRaw, vertexAt, type Vec3 } from './geom.ts';
+import { dot, length, normalize, sub, triangleNormalRaw, vertexAt, type Vec3 } from './geom.ts';
 import { computeBounds, type MeshData } from './types.ts';
 import { UnionFind } from './unionFind.ts';
 
@@ -15,13 +15,13 @@ export interface GapCloseResult {
   snappedToEdge: number;
 }
 
-const DEFAULT_EDGE_MULTIPLE = 3;
+const DEFAULT_EDGE_MULTIPLE = 4;
 const DEFAULT_DIAGONAL_CAP = 0.01;
 /** 비다양체 분리로 복제한 정점은 좌표가 완전히 같다. 그 쌍은 다시 붙이지 않는다. */
 const COINCIDENT_EPS = 1e-18;
 
 const MAX_CYCLES = 8;
-const SNAPS_PER_CYCLE = 0;
+const SNAPS_PER_CYCLE = 2;
 
 /**
  * 열린 테두리 끝점을 가까운 끝점·에지에 붙여 닫힌 루프로 승격한다.
@@ -54,7 +54,7 @@ export function closeGaps(mesh: MeshData): GapCloseResult {
       }
     }
 
-    const zipped = zipOverlappingEdges(working, epsilon, incidence);
+    const zipped = zipOverlappingEdges(working, epsilon, incidence, {});
     if (zipped.count > 0) {
       working = zipped.mesh;
       mergedPairs += zipped.count;
@@ -254,10 +254,24 @@ function mergeWouldStack(
  * 마주 보고 거의 겹친 경계 에지 쌍을 지퍼로 붙인다.
  * 단순화로 생긴 긴 찢어짐은 끝점만으로는 안 닫히고, 변의 중간이 맞닿아 있다.
  */
+export function zipLeftoverSlits(mesh: MeshData): { mesh: MeshData; count: number } {
+  const incidence = new EdgeIncidence(mesh);
+  const diagonal = computeBounds(mesh.positions).diagonal;
+  const epsilon = Math.min(incidence.meanLength * 4, diagonal * 0.04);
+  if (epsilon <= 0) return { mesh, count: 0 };
+  return zipOverlappingEdges(mesh, epsilon, incidence, {
+    midMultiple: 2.4,
+    lengthRatio: 2.2,
+    parallelDot: 0.88,
+    inPlaneSlit: true,
+  });
+}
+
 function zipOverlappingEdges(
   mesh: MeshData,
   epsilon: number,
   incidence: EdgeIncidence,
+  opts: { midMultiple?: number; lengthRatio?: number; parallelDot?: number; inPlaneSlit?: boolean },
 ): { mesh: MeshData; count: number } {
   const topology = buildTopology(mesh);
   const n = topology.fillFrom.length;
@@ -268,7 +282,7 @@ function zipOverlappingEdges(
   const positions = mesh.positions;
   const V = positions.length / 3;
   const table = new IntHashTable(n);
-  const segs: { a: number; b: number }[] = [];
+  const segs: { a: number; b: number; face: number }[] = [];
   const seen = new Set<number>();
 
   for (let i = 0; i < n; i++) {
@@ -278,7 +292,7 @@ function zipOverlappingEdges(
     if (seen.has(key)) continue;
     seen.add(key);
     const id = segs.length;
-    segs.push({ a, b });
+    segs.push({ a, b, face: topology.fillFace[i] });
     const ao = a * 3;
     const bo = b * 3;
     const mx = (positions[ao] + positions[bo]) * 0.5;
@@ -323,13 +337,21 @@ function zipOverlappingEdges(
             if (len1 < 1e-18 || len2 < 1e-18) continue;
             const long = Math.max(len1, len2);
             const short = Math.min(len1, len2);
-            if (long / short > 1.8) continue;
+            if (long / short > (opts.lengthRatio ?? 2.0)) continue;
             const n1 = [t1[0] / len1, t1[1] / len1, t1[2] / len1] as Vec3;
             const n2 = [t2[0] / len2, t2[1] / len2, t2[2] / len2] as Vec3;
-            if (Math.abs(dot(n1, n2)) < 0.85) continue;
+            if (Math.abs(dot(n1, n2)) < (opts.parallelDot ?? 0.85)) continue;
             const mq: Vec3 = [(pc[0] + pd[0]) * 0.5, (pc[1] + pd[1]) * 0.5, (pc[2] + pd[2]) * 0.5];
-            const midLimit = short * 0.35;
+            const midLimit = short * (opts.midMultiple ?? 0.5);
             if (dist2([mx, my, mz], mq) > midLimit * midLimit) continue;
+            if (opts.inPlaneSlit) {
+              const fn1 = faceNormalAt(mesh, s.face);
+              const fn2 = faceNormalAt(mesh, o.face);
+              if (dot(fn1, fn2) < 0.3) continue;
+              const gap = normalize(sub(mq, [mx, my, mz]));
+              if (length(gap) < 1e-18) continue;
+              if (Math.abs(dot(gap, fn1)) > 0.5 || Math.abs(dot(gap, fn2)) > 0.5) continue;
+            }
             const dAd = dist2(pa, pd);
             const dBc = dist2(pb, pc);
             const dAc = dist2(pa, pc);
@@ -377,6 +399,17 @@ function zipOverlappingEdges(
     mesh: mergeVertexGroups(mesh, groupsFromPairs(pairs, V)),
     count: pairs.length,
   };
+}
+
+function faceNormalAt(mesh: MeshData, face: number): Vec3 {
+  const o = face * 3;
+  return normalize(
+    triangleNormalRaw(
+      vertexAt(mesh.positions, mesh.indices[o]),
+      vertexAt(mesh.positions, mesh.indices[o + 1]),
+      vertexAt(mesh.positions, mesh.indices[o + 2]),
+    ),
+  );
 }
 
 function dist2(a: Vec3, b: Vec3): number {

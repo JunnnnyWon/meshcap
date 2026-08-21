@@ -9,7 +9,7 @@ const TEAM = [
   {
     name: '박정훈',
     studentId: '202413032',
-    role: '구멍 메우기 · 메시 정리',
+    role: '구멍 메우기 · 남은 찢김 부착',
   },
   {
     name: '배윤서',
@@ -44,8 +44,8 @@ export function AboutPage() {
           </h1>
           <p className="mt-4 text-[14px] leading-relaxed text-ink-300">
             청강문화산업대학교 게임콘텐츠스쿨에서 셋이 만든 도구입니다. 생성형 3D 캐릭터를
-            출력하면 거의 매번 구멍이 남아 있습니다. 그 구멍을 손으로 고치는 시간을 줄이려고
-            만들었습니다.
+            출력하면 거의 매번 구멍이 남아 있습니다. 그 구멍을 메우고, 남은 찢김은 주변 곡면에
+            이어져 보이게 붙이려고 만들었습니다. 점수는 진단입니다.
           </p>
           <p className="mt-3 text-[14px] leading-relaxed text-ink-300">
             2026 청강 AI 크리에이티브 부스트 공모전 출품작.
@@ -85,8 +85,8 @@ export function AboutPage() {
             ))}
           </div>
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-400">
-            콘셉트와 초안 정리에 AI를 썼습니다. 메시를 읽고 구멍을 메우는 코드는 직접 짰고,
-            테스트로 확인합니다. 커밋 로그에 그 과정이 남아 있습니다.
+            콘셉트와 초안 정리에 AI를 썼습니다. 메시를 읽고 구멍을 메우고 남은 찢김을 붙이는
+            코드는 직접 짰고, 테스트로 확인합니다. 커밋 로그에 그 과정이 남아 있습니다.
           </p>
         </Section>
 

@@ -1,5 +1,6 @@
 import { cross, dot, length, normalize, sub, vertexAt, type Vec3 } from '../geom.ts';
 import type { CapContext, CapPatch } from './types.ts';
+import { clampPatchSteiners } from './refine.ts';
 
 const MAX_SAMPLES = 48;
 const OFFSET_RATIO = 0.4;
@@ -29,7 +30,7 @@ export function projectCsrbf(ctx: CapContext, patch: CapPatch): CapPatch {
     newPositions[i + 2] = p[2];
   }
 
-  return { newPositions, triangles: patch.triangles };
+  return clampPatchSteiners(ctx, { newPositions, triangles: patch.triangles });
 }
 
 interface Sample {
@@ -214,12 +215,11 @@ function solveDense(A: Float64Array, n: number, b: Float64Array): Float64Array |
   return x;
 }
 
-/** 큰 비평면 구멍에만 쓴다. 작은 구멍은 페어링만으로 충분하다. */
+/** 정점 8개 이상이고 조금 휘어진 구멍에 쓴다. 바닥 받침은 제외. */
 export function shouldProjectCsrbf(ctx: CapContext): boolean {
   return (
-    ctx.metrics.strategy === 'liepa' &&
-    ctx.metrics.vertices.length >= 16 &&
-    ctx.metrics.relativeSize >= 0.04 &&
-    ctx.metrics.planarity >= 0.06
+    ctx.metrics.strategy !== 'flatBase' &&
+    ctx.metrics.vertices.length >= 8 &&
+    ctx.metrics.planarity >= 0.04
   );
 }
