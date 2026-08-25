@@ -123,6 +123,19 @@ export function AboutPage() {
           </p>
         </Section>
 
+        <Section title="실물 기록">
+          <p className="text-[13.5px] leading-relaxed text-ink-300">
+            MeshCap으로 닫은 모델을 출력하고 다듬은 사진, 출력 타임랩스는 실물 페이지에 모아
+            두었습니다.
+          </p>
+          <a
+            href="#/gallery"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-ink-700 px-4 py-2.5 text-[13px] text-ink-200 hover:border-ink-600 hover:text-ink-100 transition-colors"
+          >
+            실물 보기
+          </a>
+        </Section>
+
         <Section title="저장소">
           <a
             href={REPO_URL}

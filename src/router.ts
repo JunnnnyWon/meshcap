@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export const ROUTES = ['tool', 'benchmark', 'method', 'about'] as const;
+export const ROUTES = ['tool', 'benchmark', 'method', 'gallery', 'about'] as const;
 export type Route = (typeof ROUTES)[number];
 
 const DEFAULT_ROUTE: Route = 'tool';

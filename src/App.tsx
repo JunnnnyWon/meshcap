@@ -3,11 +3,13 @@ import { ToolPage } from './pages/ToolPage.tsx';
 import { BenchmarkPage } from './pages/BenchmarkPage.tsx';
 import { MethodPage } from './pages/MethodPage.tsx';
 import { AboutPage } from './pages/AboutPage.tsx';
+import { GalleryPage } from './pages/GalleryPage.tsx';
 
 const NAV: { id: Route; label: string; sub: string }[] = [
   { id: 'tool', label: '진단 · 보정', sub: 'Tool' },
   { id: 'benchmark', label: '벤치마크', sub: '3D AI 비교' },
   { id: 'method', label: '알고리즘', sub: 'Method' },
+  { id: 'gallery', label: '실물', sub: 'Gallery' },
   { id: 'about', label: '프로젝트', sub: 'About' },
 ];
 
@@ -83,6 +85,7 @@ export function App() {
         {route === 'tool' && <ToolPage />}
         {route === 'benchmark' && <BenchmarkPage />}
         {route === 'method' && <MethodPage />}
+        {route === 'gallery' && <GalleryPage />}
         {route === 'about' && <AboutPage />}
       </main>
     </div>
