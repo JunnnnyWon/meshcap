@@ -37,6 +37,12 @@ function rawHasDirected(indices: Uint32Array, f: number, u: number, v: number): 
  * 안팎을 판정하므로, 방향이 섞여 있으면 멀쩡히 닫힌 메시도 속이 빈 껍데기나
  * 뒤집힌 덩어리로 해석된다.
  *
+ * 방향은 면이 정확히 둘인 에지로만 전파한다. 셋 이상이 붙은 비다양체 에지에서
+ * 처음 만난 두 면을 짝으로 삼으면 서로 다른 겹(몸통과 옷, 겹친 시트)을 억지로
+ * 반대 방향으로 맞추게 되어, 멀쩡한 면까지 대량으로 뒤집히고 방향 불일치가
+ * 오히려 늘어난다. 이렇게 나뉜 패치는 전파 결과를 통째로 뒤집어도 패치 안의
+ * 일관성이 그대로이므로, 원래 감는 방향과 더 많이 맞는 쪽을 고른다.
+ *
  * 방향 통일은 구멍을 찾기 전에 해야 한다. 뒤집힌 면이 구멍 테두리에 닿아 있으면
  * 그 지점에서 경계 에지의 진행 방향이 거꾸로 뒤집혀 테두리 추적이 끊기고, 멀쩡한
  * 구멍 하나가 여러 개의 열린 사슬로 쪼개져 메울 수 없게 된다. 반면 껍질을 바깥으로
@@ -51,7 +57,7 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
     return { mesh, flippedTriangles: 0, volume: 0, conflicts: 0, invertedShells: 0 };
   }
 
-  // 무방향 에지마다 접한 면을 최대 두 개까지 기록한다.
+  // 무방향 에지마다 접한 면을 최대 두 개까지, 면 수는 포화 카운터로 기록한다.
   // 타입 배열로 잡는 이유는 halfEdge.ts와 같다. Map과 일반 배열로는 수백만 삼각형에서
   // 이 함수 하나가 기가바이트를 쓴다.
   const maxEdges = Math.max(1, indices.length);
@@ -60,6 +66,7 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
   let faceB = new Int32Array(capacity).fill(-1);
   let edgeLo = new Uint32Array(capacity);
   let edgeHi = new Uint32Array(capacity);
+  let faceCount = new Uint8Array(capacity);
   const table = new IntHashTable(capacity, capacity);
   let edgeCount = 0;
 
@@ -73,12 +80,29 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
     nextLo.set(edgeLo);
     const nextHi = new Uint32Array(grown);
     nextHi.set(edgeHi);
+    const nextCount = new Uint8Array(grown);
+    nextCount.set(faceCount);
     faceA = nextFaceA;
     faceB = nextFaceB;
     edgeLo = nextLo;
     edgeHi = nextHi;
+    faceCount = nextCount;
     capacity = grown;
     table.growTo(grown);
+  };
+
+  // 껍질(에지를 하나라도 공유하는 면의 묶음). 바깥 판정 단위다.
+  const shellParent = new Int32Array(F);
+  for (let f = 0; f < F; f++) shellParent[f] = f;
+  const findShell = (x: number): number => {
+    let root = x;
+    while (shellParent[root] !== root) root = shellParent[root];
+    while (shellParent[x] !== root) {
+      const next = shellParent[x];
+      shellParent[x] = root;
+      x = next;
+    }
+    return root;
   };
 
   for (let f = 0; f < F; f++) {
@@ -105,16 +129,22 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
         edgeHi[id] = hi;
         faceA[id] = f;
         table.insert(key, id);
-      } else if (faceB[id] === -1 && faceA[id] !== f) {
-        faceB[id] = f;
+      } else {
+        if (faceB[id] === -1 && faceA[id] !== f) faceB[id] = f;
+        const ra = findShell(faceA[id]);
+        const rb = findShell(f);
+        if (ra !== rb) shellParent[rb] = ra;
       }
+      if (faceCount[id] < 255) faceCount[id]++;
     }
   }
 
-  // 면 인접 리스트를 CSR 형태로 만든다.
+  const propagates = (id: number) => faceB[id] !== -1 && faceCount[id] === 2;
+
+  // 면 인접 리스트를 CSR 형태로 만든다. 면이 정확히 둘인 에지만 넣는다.
   const degree = new Int32Array(F);
   for (let id = 0; id < edgeCount; id++) {
-    if (faceB[id] === -1) continue;
+    if (!propagates(id)) continue;
     degree[faceA[id]]++;
     degree[faceB[id]]++;
   }
@@ -125,9 +155,9 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
   const neighborEdge = new Int32Array(start[F]);
 
   for (let id = 0; id < edgeCount; id++) {
+    if (!propagates(id)) continue;
     const a = faceA[id];
     const b = faceB[id];
-    if (b === -1) continue;
     neighborFace[cursor[a]] = b;
     neighborEdge[cursor[a]++] = id;
     neighborFace[cursor[b]] = a;
@@ -139,7 +169,6 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
   let invertedShells = 0;
 
   const queue = new Int32Array(F);
-  const component: number[] = [];
 
   for (let seed = 0; seed < F; seed++) {
     if (flip[seed] !== -1) continue;
@@ -148,11 +177,11 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
     let head = 0;
     let tail = 0;
     queue[tail++] = seed;
-    component.length = 0;
+    let flippedInPatch = 0;
 
     while (head < tail) {
       const f = queue[head++];
-      component.push(f);
+      if (flip[f] === 1) flippedInPatch++;
 
       for (let p = start[f]; p < start[f + 1]; p++) {
         const g = neighborFace[p];
@@ -176,16 +205,29 @@ export function orientOutward(mesh: MeshData, options: OrientOptions = {}): Orie
       }
     }
 
-    if (!alignOutward) continue;
-
-    // 이 껍질의 부호 있는 부피가 음수면 통째로 뒤집는다.
-    let shellVolume = 0;
-    for (const f of component) {
-      shellVolume += signedTetraVolume(positions, indices, f, flip[f] === 1);
+    // 씨앗 면이 하필 뒤집힌 면이면 패치 전체가 거꾸로 맞춰진다. 패치를 통째로
+    // 뒤집어도 안쪽 일관성은 같으므로, 원래 방향과 더 많이 맞는 쪽을 남긴다.
+    if (flippedInPatch * 2 > tail) {
+      for (let i = 0; i < tail; i++) {
+        const f = queue[i];
+        flip[f] = flip[f] === 1 ? 0 : 1;
+      }
     }
-    if (shellVolume < 0) {
-      invertedShells++;
-      for (const f of component) flip[f] = flip[f] === 1 ? 0 : 1;
+  }
+
+  if (alignOutward) {
+    // 껍질마다 부호 있는 부피가 음수면 통째로 뒤집는다. 비다양체 에지로 나뉜
+    // 작은 패치는 열린 조각이라 부피 부호가 원점 위치에 따라 흔들리므로,
+    // 에지로 이어진 껍질 전체를 한 단위로 본다.
+    const shellVolume = new Float64Array(F);
+    for (let f = 0; f < F; f++) {
+      shellVolume[findShell(f)] += signedTetraVolume(positions, indices, f, flip[f] === 1);
+    }
+    for (let f = 0; f < F; f++) {
+      if (shellParent[f] === f && shellVolume[f] < 0) invertedShells++;
+    }
+    for (let f = 0; f < F; f++) {
+      if (shellVolume[findShell(f)] < 0) flip[f] = flip[f] === 1 ? 0 : 1;
     }
   }
 
