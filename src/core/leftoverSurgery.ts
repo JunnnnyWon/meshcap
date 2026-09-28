@@ -71,8 +71,14 @@ const SUB_COVER = 0.55;
  * 짧은 1-face 미매칭 변을 한 건씩 접고, 겹친 안쪽 면은 한 트랜잭션으로 교체한다.
  * 전역 1-face가 줄고 비다양체가 늘지 않을 때만 남긴다.
  */
-export function applyLeftoverSurgeries(mesh: MeshData): LeftoverSurgeryResult {
+export function applyLeftoverSurgeries(
+  mesh: MeshData,
+  budgetMs = Number.POSITIVE_INFINITY,
+): LeftoverSurgeryResult {
   let working = mesh;
+  const t0 = Date.now();
+  const over = () => Date.now() - t0 >= budgetMs;
+  const left = () => Math.max(0, budgetMs - (Date.now() - t0));
   let collapsedShort = 0;
   let overlapReplaces = 0;
   let cavityCommits = 0;
@@ -92,12 +98,15 @@ export function applyLeftoverSurgeries(mesh: MeshData): LeftoverSurgeryResult {
   let wrappedTriangles = 0;
 
   for (let i = 0; i < MAX_INSERT; i++) {
+    if (over()) break;
     const one = insertOneConstrained(working);
     if (!one) break;
     working = one;
     insertCommits++;
   }
-  const stripped = applyGapStrips(working, MAX_STRIP);
+  const stripped = over()
+    ? { mesh: working, commits: 0, multi: 0, far: 0, bow: 0, budgetHit: false }
+    : applyGapStrips(working, MAX_STRIP, true, left());
   working = stripped.mesh;
   stripCommits = stripped.commits;
   stripMultiCommits = stripped.multi;
@@ -105,52 +114,57 @@ export function applyLeftoverSurgeries(mesh: MeshData): LeftoverSurgeryResult {
   stripBowCommits = stripped.bow;
   stripBudgetHit = stripped.budgetHit;
   for (let i = 0; i < MAX_SHORT; i++) {
+    if (over()) break;
     const one = collapseOneShortUnmatched(working);
     if (!one) break;
     working = one;
     collapsedShort++;
   }
   for (let i = 0; i < MAX_REPLACE; i++) {
+    if (over()) break;
     const one = replaceOneOverlap(working);
     if (!one) break;
     working = one;
     overlapReplaces++;
   }
   for (let i = 0; i < MAX_SPATIAL; i++) {
+    if (over()) break;
     const one = remeshOneSpatialCavity(working);
     if (!one) break;
     working = one;
     spatialZipCommits++;
   }
   for (let i = 0; i < MAX_CAVITY; i++) {
+    if (over()) break;
     const one = collectCavityTrials(working, { stopAtFirst: true, limit: 80 })?.commit ?? null;
     if (!one) break;
     working = one;
     cavityCommits++;
   }
-  if (buildTopology(working).boundaryEdgeCount > 0) {
-    const wrapped = wrapLeftoverEdgeAabbs(working);
+  if (!over() && buildTopology(working).boundaryEdgeCount > 0) {
+    const wrapped = wrapLeftoverEdgeAabbs(working, undefined, undefined, left());
     if (wrapped.addedTriangles > 0 && isSafer(working, wrapped.mesh)) {
       working = wrapped.mesh;
       wrappedTriangles = wrapped.addedTriangles;
     }
   }
-  const split = splitSheetSpokes(working, MAX_SHEET_SPLIT);
+  const split = over() ? { mesh: working, commits: 0 } : splitSheetSpokes(working, MAX_SHEET_SPLIT, left());
   working = split.mesh;
   sheetSplitCommits = split.commits;
-  if (sheetSplitCommits > 0) {
-    const afterSplit = applyFarNoHitStrips(working, MAX_STRIP);
+  if (sheetSplitCommits > 0 && !over()) {
+    const afterSplit = applyFarNoHitStrips(working, MAX_STRIP, left());
     working = afterSplit.mesh;
     stripCommits += afterSplit.commits;
     stripFarCommits += afterSplit.far;
   }
   for (let i = 0; i < MAX_LEFTOVER_ZIP; i++) {
+    if (over()) break;
     const one = zipOneLeftoverPair(working);
     if (!one) break;
     working = one;
     leftoverZipCommits++;
   }
-  const recapped = recapDrawnChains(working, MAX_CHAIN_RECAP);
+  const recapped = over() ? { mesh: working, commits: 0 } : recapDrawnChains(working, MAX_CHAIN_RECAP, left());
   working = recapped.mesh;
   chainRecapCommits = recapped.commits;
   return { mesh: working, collapsedShort, overlapReplaces, cavityCommits, spatialZipCommits, subsegmentZipCommits, polylineZipCommits, sliverCutCommits, insertCommits, stripCommits, stripMultiCommits, stripFarCommits, leftoverZipCommits, sheetSplitCommits, stripBowCommits, chainRecapCommits, stripBudgetHit, wrappedTriangles };
@@ -862,7 +876,12 @@ export function stripOneGap(mesh: MeshData): MeshData | null {
   return one.commits > 0 ? one.mesh : null;
 }
 
-function applyGapStrips(mesh: MeshData, maxCommits: number, drawnOnly = true): { mesh: MeshData; commits: number; multi: number; far: number; bow: number; budgetHit: boolean } {
+function applyGapStrips(
+  mesh: MeshData,
+  maxCommits: number,
+  drawnOnly = true,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number; multi: number; far: number; bow: number; budgetHit: boolean } {
   const candidates = collectStripCandidates(mesh, drawnOnly);
   if (candidates.length === 0) return { mesh, commits: 0, multi: 0, far: 0, bow: 0, budgetHit: false };
   const budget = drawnOnly ? Math.max(maxCommits, candidates.length) : maxCommits;
@@ -872,8 +891,9 @@ function applyGapStrips(mesh: MeshData, maxCommits: number, drawnOnly = true): {
   let far = 0;
   let bow = 0;
   let cursor = 0;
+  const t0 = Date.now();
   for (; cursor < candidates.length; cursor++) {
-    if (commits >= budget) break;
+    if (commits >= budget || Date.now() - t0 >= budgetMs) break;
     const cand = candidates[cursor];
     if (new EdgeIncidence(working).count(cand.a, cand.b) !== 1) continue;
     const trial = addGapStrip(working, cand);
@@ -891,15 +911,20 @@ function applyGapStrips(mesh: MeshData, maxCommits: number, drawnOnly = true): {
   return { mesh: working, commits, multi, far, bow, budgetHit: commits >= budget && cursor < candidates.length };
 }
 
-function applyFarNoHitStrips(mesh: MeshData, maxCommits: number): { mesh: MeshData; commits: number; far: number } {
+function applyFarNoHitStrips(
+  mesh: MeshData,
+  maxCommits: number,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number; far: number } {
   const candidates = collectStripCandidates(mesh).filter((c) => c.far);
   if (candidates.length === 0) return { mesh, commits: 0, far: 0 };
   const budget = Math.max(maxCommits, candidates.length);
   let working = mesh;
   let commits = 0;
   let far = 0;
+  const t0 = Date.now();
   for (const cand of candidates) {
-    if (commits >= budget) break;
+    if (commits >= budget || Date.now() - t0 >= budgetMs) break;
     if (new EdgeIncidence(working).count(cand.a, cand.b) !== 1) continue;
     const trial = addGapStrip(working, cand);
     if (!trial) continue;
@@ -1145,7 +1170,11 @@ export function splitOneSheetSpoke(mesh: MeshData): MeshData | null {
   return one.commits > 0 ? one.mesh : null;
 }
 
-function splitSheetSpokes(mesh: MeshData, maxCommits: number): { mesh: MeshData; commits: number } {
+function splitSheetSpokes(
+  mesh: MeshData,
+  maxCommits: number,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number } {
   const drawn = listDrawnLeftoverEdges(mesh);
   if (drawn.length === 0) return { mesh, commits: 0 };
   const incidence = new EdgeIncidence(mesh);
@@ -1181,8 +1210,9 @@ function splitSheetSpokes(mesh: MeshData, maxCommits: number): { mesh: MeshData;
   let working = mesh;
   let commits = 0;
   let beforeNm = buildTopology(working).nonManifoldEdgeCount;
+  const t0 = Date.now();
   for (const cand of candidates) {
-    if (commits >= maxCommits) break;
+    if (commits >= maxCommits || Date.now() - t0 >= budgetMs) break;
     if (new EdgeIncidence(working).count(cand.sheet, cand.far) !== 1) continue;
     const split = splitEdgeAt(working, cand.sheet, cand.far, cand.t);
     if (!split) continue;
@@ -1577,7 +1607,11 @@ function collectInteriorEdges(interiors: InteriorFace[]): { p: Vec3; q: Vec3; n:
   return out;
 }
 
-function recapDrawnChains(mesh: MeshData, maxCommits: number): { mesh: MeshData; commits: number } {
+function recapDrawnChains(
+  mesh: MeshData,
+  maxCommits: number,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number } {
   const drawn = listDrawnLeftoverEdges(mesh);
   if (drawn.length < 2) return { mesh, commits: 0 };
   const chains = openChainsFromEdges(drawn).filter((v) => v.length >= 3 && v.length <= MAX_RECAP_VERTS);
@@ -1586,8 +1620,9 @@ function recapDrawnChains(mesh: MeshData, maxCommits: number): { mesh: MeshData;
   let commits = 0;
   let beforeNm = buildTopology(working).nonManifoldEdgeCount;
   let before1 = buildTopology(working).boundaryEdgeCount;
+  const t0 = Date.now();
   for (const verts of chains) {
-    if (commits >= maxCommits) break;
+    if (commits >= maxCommits || Date.now() - t0 >= budgetMs) break;
     if (new EdgeIncidence(working).count(verts[0], verts[verts.length - 1]) >= 2) continue;
     const faces = facesOfEdge(working, verts[0], verts[1]);
     if (faces.length === 0) continue;

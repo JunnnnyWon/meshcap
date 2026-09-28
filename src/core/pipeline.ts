@@ -43,9 +43,16 @@ export interface PipelineOptions extends ClassifyOptions {
   wrapResolution?: number;
   /** 로컬 채움 뒤 남은 테두리 랩을 끈다. 절제 실험용. */
   disableWrap?: boolean;
+  /**
+   * 구멍 메우기 단계의 벽시계 상한(ms). 넘으면 남은 선택적 정리(남은 테두리
+   * 랩·표면 부착)를 생략하고 여기까지의 결과를 돌려준다. 병적인 입력에서
+   * 이 정리가 혼자 수 분을 먹을 수 있어 상한이 없으면 요청이 죽는다.
+   */
+  capBudgetMs?: number;
 }
 
 const DEFAULT_MAX_CAP_PASSES = 4;
+const DEFAULT_CAP_BUDGET_MS = 120_000;
 
 export interface HoleReport {
   id: number;
@@ -300,6 +307,7 @@ export function runPipeline(
 
   stage('cap');
   const tCap = now();
+  const capDeadline = tCap + (options.capBudgetMs ?? DEFAULT_CAP_BUDGET_MS);
   const capTriangleStart = repairedMesh.indices.length / 3;
   let capPasses = 0;
 
@@ -314,6 +322,7 @@ export function runPipeline(
      * 특히 자주 생긴다. 남은 틈이 없어지거나 더 줄지 않을 때까지 반복한다.
      */
     for (let pass = 0; pass < (options.maxCapPasses ?? DEFAULT_MAX_CAP_PASSES); pass++) {
+      if (now() >= capDeadline) break;
       if (pass === 0) {
         for (const metric of passMetrics) {
           if (metric.strategy === 'skip') {
@@ -391,7 +400,12 @@ export function runPipeline(
       passMetrics = nextMetrics;
     }
 
-    const leftover = attachLeftoverTears(repairedMesh, bounds, options);
+    const leftover = attachLeftoverTears(
+      repairedMesh,
+      bounds,
+      options,
+      Math.max(0, capDeadline - now()),
+    );
     repairedMesh = leftover.mesh;
     repairSummary.bridgedTriangles = leftover.bridgedTriangles;
     repairSummary.wrappedTriangles = leftover.wrappedTriangles;
@@ -491,6 +505,7 @@ function attachLeftoverTears(
   mesh: MeshData,
   bounds: ReturnType<typeof computeBounds>,
   options: PipelineOptions,
+  budgetMs = Number.POSITIVE_INFINITY,
 ): {
   mesh: MeshData;
   bridgedTriangles: number;
@@ -523,8 +538,12 @@ function attachLeftoverTears(
   let bridgedTriangles = 0;
   let wrappedTriangles = 0;
   let addedPasses = 0;
+  const t0 = Date.now();
+  const over = () => Date.now() - t0 >= budgetMs;
+  const left = () => Math.max(0, budgetMs - (Date.now() - t0));
 
   for (let cycle = 0; cycle < 3; cycle++) {
+    if (over()) break;
     const before = buildTopology(working).boundaryEdgeCount;
     if (before === 0) break;
 
@@ -544,7 +563,7 @@ function attachLeftoverTears(
       .filter((metric) => metric.strategy !== 'skip' && metric.strategy !== 'collapse')
       .sort((a, b) => a.vertices.length - b.vertices.length);
 
-    if (leftover.length > 0) {
+    if (leftover.length > 0 && !over()) {
       const extraPositions: number[] = [];
       const extraTriangles: number[] = [];
       const lookup = buildBoundaryFaceLookup(topology, working.positions.length / 3);
@@ -583,7 +602,7 @@ function attachLeftoverTears(
       }
     }
 
-    const bridged = bridgeLeftoverTears(working);
+    const bridged = over() ? { mesh: working, addedTriangles: 0 } : bridgeLeftoverTears(working);
     working = bridged.mesh;
     bridgedTriangles += bridged.addedTriangles;
     if (bridged.addedTriangles > 0) addedPasses++;
@@ -592,11 +611,12 @@ function attachLeftoverTears(
     if (after >= before) break;
   }
 
-  if (!options.disableWrap && buildTopology(working).boundaryEdgeCount > 0) {
+  if (!options.disableWrap && !over() && buildTopology(working).boundaryEdgeCount > 0) {
     const clustered = wrapBoundaryClusters(
       working,
       options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
       options.strictManifold === true,
+      left(),
     );
     working = clustered.mesh;
     wrappedTriangles += clustered.addedTriangles;
@@ -609,8 +629,8 @@ function attachLeftoverTears(
       bounds,
       new EdgeIncidence(working).meanLength,
     ).some((metric) => metric.vertices.length >= 12);
-    if (leftoverLoops) {
-      const loopWrap = applyLeftoverWrap(working, bounds, options);
+    if (leftoverLoops && !over()) {
+      const loopWrap = applyLeftoverWrap(working, bounds, options, left());
       working = loopWrap.mesh;
       wrappedTriangles += loopWrap.addedTriangles;
       if (loopWrap.addedTriangles > 0) addedPasses++;
@@ -621,7 +641,33 @@ function attachLeftoverTears(
     bridgedTriangles += afterWrap.addedTriangles;
   }
 
-  const surface = attachToExistingSurface(working);
+  const surface = over()
+    ? {
+        mesh: working,
+        collapsedSlits: 0,
+        snappedToInterior: 0,
+        deletedFlaps: 0,
+        snappedTJunctions: 0,
+        zippedCracks: 0,
+        collapsedShort: 0,
+        overlapReplaces: 0,
+        cavityCommits: 0,
+        spatialZipCommits: 0,
+        subsegmentZipCommits: 0,
+        polylineZipCommits: 0,
+        sliverCutCommits: 0,
+        insertCommits: 0,
+        stripCommits: 0,
+        stripMultiCommits: 0,
+        stripFarCommits: 0,
+        leftoverZipCommits: 0,
+        sheetSplitCommits: 0,
+        stripBowCommits: 0,
+        chainRecapCommits: 0,
+        stripBudgetHit: false,
+        wrappedTriangles: 0,
+      }
+    : attachToExistingSurface(working, left());
   working = surface.mesh;
   wrappedTriangles += surface.wrappedTriangles;
   if (surface.collapsedSlits + surface.snappedToInterior + surface.deletedFlaps + surface.snappedTJunctions + surface.zippedCracks + surface.collapsedShort + surface.overlapReplaces + surface.cavityCommits + surface.spatialZipCommits + surface.subsegmentZipCommits + surface.polylineZipCommits + surface.sliverCutCommits + surface.insertCommits + surface.stripCommits + surface.leftoverZipCommits + surface.sheetSplitCommits + surface.stripBowCommits + surface.chainRecapCommits + surface.wrappedTriangles > 0) addedPasses++;
@@ -660,7 +706,9 @@ function applyLeftoverWrap(
   mesh: MeshData,
   bounds: ReturnType<typeof computeBounds>,
   options: PipelineOptions,
+  budgetMs = Number.POSITIVE_INFINITY,
 ): { mesh: MeshData; addedTriangles: number; closedEverything: boolean } {
+  const tEntry = Date.now();
   const topology = buildTopology(mesh);
   if (topology.boundaryEdgeCount === 0) {
     return { mesh, addedTriangles: 0, closedEverything: true };
@@ -692,6 +740,7 @@ function applyLeftoverWrap(
     (a, b) => incidence.count(a, b),
     options.strictManifold === true ? (a, b, c) => incidence.wouldCreateNonManifold(a, b, c) : undefined,
     (a, b, c) => incidence.addTriangle(a, b, c),
+    budgetMs - (Date.now() - tEntry),
   );
 
   if (patch.triangles.length === 0) {
