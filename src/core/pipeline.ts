@@ -346,6 +346,7 @@ export function runPipeline(
       const baseCount = repairedMesh.positions.length / 3;
 
       for (const metric of fillable) {
+        if (now() >= capDeadline) break;
         const outcome = applyCap({
           mesh: repairedMesh,
           metrics: metric,

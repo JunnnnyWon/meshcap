@@ -23,7 +23,7 @@ const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES ?? 512 * 1024 * 1024);
 // Cloudflare 프리 플랜은 엣지 응답이 ~100초에서 끊긴다. 나머지 단계(~35초)와
 // 응답 전송을 감안해 구멍 메우기에 이만큼만 쓴다. 병적인 입력에서 남은 틈
 // 정리가 혼자 수 분을 먹어 요청이 죽는 일을 막는 상한이다.
-const CAP_BUDGET_MS = Number(process.env.CAP_BUDGET_MS ?? 45_000);
+const CAP_BUDGET_MS = Number(process.env.CAP_BUDGET_MS ?? 40_000);
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
