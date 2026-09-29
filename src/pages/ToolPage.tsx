@@ -4,6 +4,7 @@ import { Viewer, type FocusRequest } from '../components/Viewer.tsx';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel.tsx';
 import { ScoreCard } from '../components/ScoreCard.tsx';
 import { HoleList } from '../components/HoleList.tsx';
+import { EnginePanel } from '../components/EnginePanel.tsx';
 import { Badge, Button, SegmentedControl } from '../components/ui.tsx';
 import { loadMeshFromFile } from '../io/loadMesh.ts';
 import { derivedFileName, downloadBlob, toBinarySTL, toGLB } from '../io/exportMesh.ts';
@@ -15,7 +16,13 @@ import {
   uploadLimitBytes,
   type ServerInfo,
 } from '../net/remote.ts';
-import { STAGE_LABEL, type HoleReport, type PipelineResult, type PipelineStage } from '../core/pipeline.ts';
+import {
+  STAGE_LABEL,
+  type HoleReport,
+  type PipelineResult,
+  type PipelineStage,
+  type RepairEngine,
+} from '../core/pipeline.ts';
 import { triangleCount } from '../core/types.ts';
 import type { UpAxis } from '../core/classify.ts';
 import type { MeshData } from '../core/types.ts';
@@ -30,7 +37,8 @@ interface Source {
   origin: 'file' | 'sample';
 }
 
-export type Engine = 'auto' | 'browser' | 'server';
+/** 어디서 계산할지. 고치는 방식(RepairEngine)과는 별개다. */
+export type Location = 'auto' | 'browser' | 'server';
 
 /** 이 아래로는 어떤 기기에서도 브라우저가 금방 끝낸다. 굳이 내보낼 이유가 없다. */
 const BROWSER_COMFORTABLE_TRIANGLES = 500_000;
@@ -69,7 +77,8 @@ export function ToolPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [engine, setEngine] = useState<Engine>('auto');
+  const [engine, setEngine] = useState<Location>('auto');
+  const [method, setMethod] = useState<RepairEngine>('auto');
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [usedEngine, setUsedEngine] = useState<'browser' | 'server' | null>(null);
 
@@ -89,9 +98,16 @@ export function ToolPage() {
   }, []);
 
   const analyze = useCallback(
-    async (mesh: MeshData, axis: UpAxis, useFlatBase: boolean, preference: Engine, server: ServerInfo | null) => {
+    async (
+      mesh: MeshData,
+      axis: UpAxis,
+      useFlatBase: boolean,
+      preference: Location,
+      repair: RepairEngine,
+      server: ServerInfo | null,
+    ) => {
       const token = ++runToken.current;
-      const options = { upAxis: axis, disableFlatBase: !useFlatBase };
+      const options = { upAxis: axis, disableFlatBase: !useFlatBase, engine: repair };
       const triangles = triangleCount(mesh);
 
       let wantsServer =
@@ -186,14 +202,14 @@ export function ToolPage() {
           origin: 'file',
         });
         setUpAxis(usedAxis);
-        await analyze(loaded.mesh, usedAxis, flatBase, engine, serverInfo);
+        await analyze(loaded.mesh, usedAxis, flatBase, engine, method, serverInfo);
       } catch (err) {
         setError(err instanceof Error ? err.message : '파일을 읽지 못했습니다.');
         setBusy(false);
         setStatus(null);
       }
     },
-    [analyze, flatBase, engine, serverInfo],
+    [analyze, flatBase, engine, method, serverInfo],
   );
 
   const handleSample = useCallback(
@@ -229,26 +245,26 @@ export function ToolPage() {
         origin: 'sample',
       });
       setUpAxis(sample.upAxis);
-      await analyze(mesh, sample.upAxis, flatBase, engine, serverInfo);
+      await analyze(mesh, sample.upAxis, flatBase, engine, method, serverInfo);
     },
-    [analyze, flatBase, engine, handleFile, serverInfo],
+    [analyze, flatBase, engine, method, handleFile, serverInfo],
   );
 
   const reanalyze = useCallback(
-    (axis: UpAxis, useFlatBase: boolean, preference: Engine = engine) => {
-      if (source) void analyze(source.mesh, axis, useFlatBase, preference, serverInfo);
+    (axis: UpAxis, useFlatBase: boolean, preference: Location = engine, repair: RepairEngine = method) => {
+      if (source) void analyze(source.mesh, axis, useFlatBase, preference, repair, serverInfo);
     },
-    [analyze, source, engine, serverInfo],
+    [analyze, source, engine, method, serverInfo],
   );
 
   const viewerInput = useMemo(() => {
     if (!result) return null;
     return {
-      before: result.weldedMesh,
+      before: result.inputMesh,
       after: result.mesh,
-      capTriangleStart: result.capTriangleStart,
-      loops: result.holes.map((hole) => hole.loop),
-      remainingEdges: result.remainingFillEdges,
+      newTriangleStart: result.newTriangleStart,
+      beforeEdges: result.beforeDefectEdges,
+      afterEdges: result.afterDefectEdges,
       upAxis,
     };
   }, [result, upAxis]);
@@ -322,21 +338,22 @@ export function ToolPage() {
           </div>
         </div>
 
-        {mode === 'before' && result && result.holes.length > 0 && (
+        {mode === 'before' && result && result.beforeDefectEdges.length > 0 && (
           <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2 pointer-events-none">
-            <LegendDot color="#ff4d4f" label="구멍 테두리" />
-            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '원래 면의 선' : '기존 표면'} />
+            <LegendDot color="#ff4d4f" label="열린 모서리·겹친 모서리" />
+            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '원래 면의 선' : '올린 표면'} />
           </div>
         )}
-        {mode === 'after' && result && (result.capTriangleStart < result.repaired.triangleCount || result.remainingFillEdges.length > 0) && (
+        {mode === 'after' && result && (
           <div className="absolute bottom-4 left-4 flex items-center gap-4 rounded-md border border-ink-800 bg-ink-950/85 backdrop-blur px-3 py-2 pointer-events-none">
-            {result.capTriangleStart < result.repaired.triangleCount && (
-              <LegendDot color="#5eead4" label={wireframe ? '메운 면의 선' : '새로 만든 면'} />
+            {result.newTriangleStart < result.repaired.triangleCount && (
+              <LegendDot color="#5eead4" label={wireframe ? '새로 채운 면의 선' : '원본과 떨어져 새로 채운 면'} />
             )}
-            {result.remainingFillEdges.length > 0 && (
-              <LegendDot color="#ff4d4f" label="남은 테두리" />
-            )}
-            <LegendDot color={wireframe ? '#e8eef6' : '#9aa4b2'} label={wireframe ? '원래 면의 선' : '기존 표면'} />
+            {result.afterDefectEdges.length > 0 && <LegendDot color="#ff4d4f" label="남은 결함 모서리" />}
+            <LegendDot
+              color={wireframe ? '#e8eef6' : '#9aa4b2'}
+              label={result.engine === 'solid' ? '원본을 따라 다시 뽑은 표면' : wireframe ? '원래 면의 선' : '기존 표면'}
+            />
           </div>
         )}
 
@@ -407,6 +424,31 @@ export function ToolPage() {
 
         <section className="px-4 py-3 border-b border-ink-800">
           <div className="flex items-center justify-between gap-3 mb-2">
+            <span className="label-caps">고치는 방식</span>
+          </div>
+          <SegmentedControl
+            options={[
+              { id: 'auto', label: '자동' },
+              { id: 'solid', label: '솔리드화' },
+              { id: 'patch', label: '구멍 메우기' },
+            ]}
+            value={method}
+            onChange={(next) => {
+              setMethod(next);
+              reanalyze(upAxis, flatBase, engine, next);
+            }}
+          />
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-600">
+            {method === 'solid'
+              ? '안과 밖을 다시 정해 닫힌 표면을 새로 뽑습니다. 겹친 면과 관통이 사라지고, 두께 없는 면에는 최소 두께를 줍니다. 원래 삼각형과 텍스처는 남지 않습니다.'
+              : method === 'patch'
+                ? '원래 삼각형을 지키고 구멍만 막습니다. 겹친 모서리나 면끼리의 관통이 많은 모델에서는 점수가 올린 그대로보다 낮아질 수 있습니다.'
+                : '겹친 모서리나 관통이 있으면 솔리드화를, 없으면 구멍 메우기를 먼저 해 보고 더 나은 쪽을 고릅니다.'}
+          </p>
+        </section>
+
+        <section className="px-4 py-3 border-b border-ink-800">
+          <div className="flex items-center justify-between gap-3 mb-2">
             <span className="label-caps">계산 위치</span>
             {usedEngine && (
               <Badge tone={usedEngine === 'server' ? 'patch' : 'neutral'}>
@@ -463,7 +505,8 @@ export function ToolPage() {
 
         {result && (
           <>
-            <ScoreCard before={result.weldedScore} after={result.repairedScore} />
+            <ScoreCard before={result.inputScore} after={result.repairedScore} />
+            <EnginePanel result={result} />
 
             <section className="px-4 py-3.5 border-b border-ink-800 flex gap-2">
               <Button
@@ -472,7 +515,7 @@ export function ToolPage() {
                 onClick={() =>
                   downloadBlob(
                     toBinarySTL(result.mesh, `MeshCap ${source.name}`),
-                    derivedFileName(source.name, 'capped', 'stl'),
+                    derivedFileName(source.name, result.engine === 'solid' ? 'solid' : 'capped', 'stl'),
                     'model/stl',
                   )
                 }
@@ -485,7 +528,7 @@ export function ToolPage() {
                 onClick={async () =>
                   downloadBlob(
                     await toGLB(result.mesh),
-                    derivedFileName(source.name, 'capped', 'glb'),
+                    derivedFileName(source.name, result.engine === 'solid' ? 'solid' : 'capped', 'glb'),
                     'model/gltf-binary',
                   )
                 }
@@ -494,7 +537,9 @@ export function ToolPage() {
               </Button>
             </section>
 
-            <HoleList holes={result.holes} selectedId={selectedHole} onSelect={handleSelectHole} />
+            {result.engine === 'patch' && (
+              <HoleList holes={result.holes} selectedId={selectedHole} onSelect={handleSelectHole} />
+            )}
             <DiagnosticsPanel result={result} />
           </>
         )}

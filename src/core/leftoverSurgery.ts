@@ -71,8 +71,14 @@ const SUB_COVER = 0.55;
  * 짧은 1-face 미매칭 변을 한 건씩 접고, 겹친 안쪽 면은 한 트랜잭션으로 교체한다.
  * 전역 1-face가 줄고 비다양체가 늘지 않을 때만 남긴다.
  */
-export function applyLeftoverSurgeries(mesh: MeshData): LeftoverSurgeryResult {
+export function applyLeftoverSurgeries(
+  mesh: MeshData,
+  budgetMs = Number.POSITIVE_INFINITY,
+): LeftoverSurgeryResult {
   let working = mesh;
+  const t0 = Date.now();
+  const over = () => Date.now() - t0 >= budgetMs;
+  const left = () => Math.max(0, budgetMs - (Date.now() - t0));
   let collapsedShort = 0;
   let overlapReplaces = 0;
   let cavityCommits = 0;
@@ -92,12 +98,15 @@ export function applyLeftoverSurgeries(mesh: MeshData): LeftoverSurgeryResult {
   let wrappedTriangles = 0;
 
   for (let i = 0; i < MAX_INSERT; i++) {
+    if (over()) break;
     const one = insertOneConstrained(working);
     if (!one) break;
     working = one;
     insertCommits++;
   }
-  const stripped = applyGapStrips(working, MAX_STRIP);
+  const stripped = over()
+    ? { mesh: working, commits: 0, multi: 0, far: 0, bow: 0, budgetHit: false }
+    : applyGapStrips(working, MAX_STRIP, true, left());
   working = stripped.mesh;
   stripCommits = stripped.commits;
   stripMultiCommits = stripped.multi;
@@ -105,52 +114,57 @@ export function applyLeftoverSurgeries(mesh: MeshData): LeftoverSurgeryResult {
   stripBowCommits = stripped.bow;
   stripBudgetHit = stripped.budgetHit;
   for (let i = 0; i < MAX_SHORT; i++) {
+    if (over()) break;
     const one = collapseOneShortUnmatched(working);
     if (!one) break;
     working = one;
     collapsedShort++;
   }
   for (let i = 0; i < MAX_REPLACE; i++) {
+    if (over()) break;
     const one = replaceOneOverlap(working);
     if (!one) break;
     working = one;
     overlapReplaces++;
   }
   for (let i = 0; i < MAX_SPATIAL; i++) {
+    if (over()) break;
     const one = remeshOneSpatialCavity(working);
     if (!one) break;
     working = one;
     spatialZipCommits++;
   }
   for (let i = 0; i < MAX_CAVITY; i++) {
+    if (over()) break;
     const one = collectCavityTrials(working, { stopAtFirst: true, limit: 80 })?.commit ?? null;
     if (!one) break;
     working = one;
     cavityCommits++;
   }
-  if (buildTopology(working).boundaryEdgeCount > 0) {
-    const wrapped = wrapLeftoverEdgeAabbs(working);
+  if (!over() && buildTopology(working).boundaryEdgeCount > 0) {
+    const wrapped = wrapLeftoverEdgeAabbs(working, undefined, undefined, left());
     if (wrapped.addedTriangles > 0 && isSafer(working, wrapped.mesh)) {
       working = wrapped.mesh;
       wrappedTriangles = wrapped.addedTriangles;
     }
   }
-  const split = splitSheetSpokes(working, MAX_SHEET_SPLIT);
+  const split = over() ? { mesh: working, commits: 0 } : splitSheetSpokes(working, MAX_SHEET_SPLIT, left());
   working = split.mesh;
   sheetSplitCommits = split.commits;
-  if (sheetSplitCommits > 0) {
-    const afterSplit = applyFarNoHitStrips(working, MAX_STRIP);
+  if (sheetSplitCommits > 0 && !over()) {
+    const afterSplit = applyFarNoHitStrips(working, MAX_STRIP, left());
     working = afterSplit.mesh;
     stripCommits += afterSplit.commits;
     stripFarCommits += afterSplit.far;
   }
   for (let i = 0; i < MAX_LEFTOVER_ZIP; i++) {
+    if (over()) break;
     const one = zipOneLeftoverPair(working);
     if (!one) break;
     working = one;
     leftoverZipCommits++;
   }
-  const recapped = recapDrawnChains(working, MAX_CHAIN_RECAP);
+  const recapped = over() ? { mesh: working, commits: 0 } : recapDrawnChains(working, MAX_CHAIN_RECAP, left());
   working = recapped.mesh;
   chainRecapCommits = recapped.commits;
   return { mesh: working, collapsedShort, overlapReplaces, cavityCommits, spatialZipCommits, subsegmentZipCommits, polylineZipCommits, sliverCutCommits, insertCommits, stripCommits, stripMultiCommits, stripFarCommits, leftoverZipCommits, sheetSplitCommits, stripBowCommits, chainRecapCommits, stripBudgetHit, wrappedTriangles };
@@ -862,7 +876,12 @@ export function stripOneGap(mesh: MeshData): MeshData | null {
   return one.commits > 0 ? one.mesh : null;
 }
 
-function applyGapStrips(mesh: MeshData, maxCommits: number, drawnOnly = true): { mesh: MeshData; commits: number; multi: number; far: number; bow: number; budgetHit: boolean } {
+function applyGapStrips(
+  mesh: MeshData,
+  maxCommits: number,
+  drawnOnly = true,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number; multi: number; far: number; bow: number; budgetHit: boolean } {
   const candidates = collectStripCandidates(mesh, drawnOnly);
   if (candidates.length === 0) return { mesh, commits: 0, multi: 0, far: 0, bow: 0, budgetHit: false };
   const budget = drawnOnly ? Math.max(maxCommits, candidates.length) : maxCommits;
@@ -872,8 +891,9 @@ function applyGapStrips(mesh: MeshData, maxCommits: number, drawnOnly = true): {
   let far = 0;
   let bow = 0;
   let cursor = 0;
+  const t0 = Date.now();
   for (; cursor < candidates.length; cursor++) {
-    if (commits >= budget) break;
+    if (commits >= budget || Date.now() - t0 >= budgetMs) break;
     const cand = candidates[cursor];
     if (new EdgeIncidence(working).count(cand.a, cand.b) !== 1) continue;
     const trial = addGapStrip(working, cand);
@@ -891,15 +911,20 @@ function applyGapStrips(mesh: MeshData, maxCommits: number, drawnOnly = true): {
   return { mesh: working, commits, multi, far, bow, budgetHit: commits >= budget && cursor < candidates.length };
 }
 
-function applyFarNoHitStrips(mesh: MeshData, maxCommits: number): { mesh: MeshData; commits: number; far: number } {
+function applyFarNoHitStrips(
+  mesh: MeshData,
+  maxCommits: number,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number; far: number } {
   const candidates = collectStripCandidates(mesh).filter((c) => c.far);
   if (candidates.length === 0) return { mesh, commits: 0, far: 0 };
   const budget = Math.max(maxCommits, candidates.length);
   let working = mesh;
   let commits = 0;
   let far = 0;
+  const t0 = Date.now();
   for (const cand of candidates) {
-    if (commits >= budget) break;
+    if (commits >= budget || Date.now() - t0 >= budgetMs) break;
     if (new EdgeIncidence(working).count(cand.a, cand.b) !== 1) continue;
     const trial = addGapStrip(working, cand);
     if (!trial) continue;
@@ -1145,7 +1170,11 @@ export function splitOneSheetSpoke(mesh: MeshData): MeshData | null {
   return one.commits > 0 ? one.mesh : null;
 }
 
-function splitSheetSpokes(mesh: MeshData, maxCommits: number): { mesh: MeshData; commits: number } {
+function splitSheetSpokes(
+  mesh: MeshData,
+  maxCommits: number,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number } {
   const drawn = listDrawnLeftoverEdges(mesh);
   if (drawn.length === 0) return { mesh, commits: 0 };
   const incidence = new EdgeIncidence(mesh);
@@ -1169,7 +1198,7 @@ function splitSheetSpokes(mesh: MeshData, maxCommits: number): { mesh: MeshData;
     let t = Math.min(0.45, Math.max(0.12, (mean * 0.4) / abLen));
     for (const sample of [0.08, 0.14, 0.2, 0.28, 0.36, 0.45]) {
       const p: Vec3 = [pa[0] + (pb[0] - pa[0]) * sample, pa[1] + (pb[1] - pa[1]) * sample, pa[2] + (pb[2] - pa[2]) * sample];
-      const hit = nearestSheetHit(p, seedN, leftoverV, interiors, 'any', false);
+      const hit = nearestSheetHit(p, seedN, leftoverV, interiors, 'any', false, mean * Math.max(STRIP_OFFSET, STRIP_DRAW));
       if (hit && hit.dist > mean * STRIP_DRAW) {
         t = sample;
         break;
@@ -1181,8 +1210,9 @@ function splitSheetSpokes(mesh: MeshData, maxCommits: number): { mesh: MeshData;
   let working = mesh;
   let commits = 0;
   let beforeNm = buildTopology(working).nonManifoldEdgeCount;
+  const t0 = Date.now();
   for (const cand of candidates) {
-    if (commits >= maxCommits) break;
+    if (commits >= maxCommits || Date.now() - t0 >= budgetMs) break;
     if (new EdgeIncidence(working).count(cand.sheet, cand.far) !== 1) continue;
     const split = splitEdgeAt(working, cand.sheet, cand.far, cand.t);
     if (!split) continue;
@@ -1488,6 +1518,159 @@ function nearestSheetDist(
 
 type InteriorFace = { face: number; u: number; v: number; w: number; pu: Vec3; pv: Vec3; pw: Vec3; n: Vec3 };
 
+// ---- 시트 질의용 격자 색인: 거리 cap 안의 후보만 원래 순서대로 돌려준다 ----
+interface BoxIndex {
+  cell: number;
+  buckets: Map<number, number[]>;
+  large: number[];
+  mark: Int32Array;
+  stamp: number;
+  count: number;
+}
+const sheetFaceIndex = new WeakMap<object, BoxIndex>();
+const sheetEdgeIndex = new WeakMap<object, BoxIndex>();
+const sheetVertexSet = new WeakMap<object, { count: number; set: Set<number> }>();
+const BOX_EPS = 1e-7;
+
+function boxCellKey(ix: number, iy: number, iz: number): number {
+  return (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(iz, 83492791)) | 0;
+}
+
+function buildBoxIndex(count: number, boxOf: (i: number, out: Float64Array) => void, cellHint: number): BoxIndex {
+  const cell = Math.max(cellHint, 1e-9);
+  const eps = cell * BOX_EPS;
+  const box = new Float64Array(6);
+  const buckets = new Map<number, number[]>();
+  const large: number[] = [];
+  for (let i = 0; i < count; i++) {
+    boxOf(i, box);
+    const x0 = Math.floor((box[0] - eps) / cell), y0 = Math.floor((box[1] - eps) / cell), z0 = Math.floor((box[2] - eps) / cell);
+    const x1 = Math.floor((box[3] + eps) / cell), y1 = Math.floor((box[4] + eps) / cell), z1 = Math.floor((box[5] + eps) / cell);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > 64) {
+      large.push(i);
+      continue;
+    }
+    for (let x = x0; x <= x1; x++)
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++) {
+          const k = boxCellKey(x, y, z);
+          const b = buckets.get(k);
+          if (b) b.push(i);
+          else buckets.set(k, [i]);
+        }
+  }
+  return { cell, buckets, large, mark: new Int32Array(count), stamp: 0, count };
+}
+
+/** [lo-r, hi+r] 상자에 걸칠 수 있는 항목 번호를 원래 순서로. 상자가 너무 크면 null(전체 순회). */
+function queryBoxIndex(idx: BoxIndex, lo: Vec3, hi: Vec3, r: number): number[] | null {
+  const cell = idx.cell;
+  const pad = r + cell * BOX_EPS;
+  const x0 = Math.floor((lo[0] - pad) / cell), y0 = Math.floor((lo[1] - pad) / cell), z0 = Math.floor((lo[2] - pad) / cell);
+  const x1 = Math.floor((hi[0] + pad) / cell), y1 = Math.floor((hi[1] + pad) / cell), z1 = Math.floor((hi[2] + pad) / cell);
+  if (!(x1 >= x0 && y1 >= y0 && z1 >= z0) || (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > 4096) return null;
+  idx.stamp++;
+  if (idx.stamp >= 0x7fffffff) {
+    idx.mark.fill(0);
+    idx.stamp = 1;
+  }
+  const stamp = idx.stamp;
+  const mark = idx.mark;
+  const out: number[] = [];
+  for (const i of idx.large) {
+    if (mark[i] !== stamp) {
+      mark[i] = stamp;
+      out.push(i);
+    }
+  }
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++) {
+        const b = idx.buckets.get(boxCellKey(x, y, z));
+        if (!b) continue;
+        for (const i of b) {
+          if (mark[i] !== stamp) {
+            mark[i] = stamp;
+            out.push(i);
+          }
+        }
+      }
+  out.sort((a, b) => a - b);
+  return out;
+}
+
+function meanEdgeOfFaces(interiors: InteriorFace[]): number {
+  let sum = 0;
+  let n = 0;
+  const step = Math.max(1, Math.floor(interiors.length / 4096));
+  for (let i = 0; i < interiors.length; i += step) {
+    const t = interiors[i];
+    sum += length(sub(t.pv, t.pu)) + length(sub(t.pw, t.pv)) + length(sub(t.pu, t.pw));
+    n += 3;
+  }
+  return n > 0 ? sum / n : 1;
+}
+
+function faceIndexOf(interiors: InteriorFace[]): BoxIndex {
+  let idx = sheetFaceIndex.get(interiors);
+  if (idx && idx.count === interiors.length) return idx;
+  idx = buildBoxIndex(
+    interiors.length,
+    (i, out) => {
+      const t = interiors[i];
+      out[0] = Math.min(t.pu[0], t.pv[0], t.pw[0]);
+      out[1] = Math.min(t.pu[1], t.pv[1], t.pw[1]);
+      out[2] = Math.min(t.pu[2], t.pv[2], t.pw[2]);
+      out[3] = Math.max(t.pu[0], t.pv[0], t.pw[0]);
+      out[4] = Math.max(t.pu[1], t.pv[1], t.pw[1]);
+      out[5] = Math.max(t.pu[2], t.pv[2], t.pw[2]);
+    },
+    meanEdgeOfFaces(interiors) * 2,
+  );
+  sheetFaceIndex.set(interiors, idx);
+  return idx;
+}
+
+function edgeIndexOf(edges: { p: Vec3; q: Vec3 }[]): BoxIndex {
+  let idx = sheetEdgeIndex.get(edges);
+  if (idx && idx.count === edges.length) return idx;
+  let sum = 0;
+  const step = Math.max(1, Math.floor(edges.length / 4096));
+  let n = 0;
+  for (let i = 0; i < edges.length; i += step) {
+    sum += length(sub(edges[i].q, edges[i].p));
+    n++;
+  }
+  idx = buildBoxIndex(
+    edges.length,
+    (i, out) => {
+      const e = edges[i];
+      out[0] = Math.min(e.p[0], e.q[0]);
+      out[1] = Math.min(e.p[1], e.q[1]);
+      out[2] = Math.min(e.p[2], e.q[2]);
+      out[3] = Math.max(e.p[0], e.q[0]);
+      out[4] = Math.max(e.p[1], e.q[1]);
+      out[5] = Math.max(e.p[2], e.q[2]);
+    },
+    (n > 0 ? sum / n : 1) * 2,
+  );
+  sheetEdgeIndex.set(edges, idx);
+  return idx;
+}
+
+function segBox(pa: Vec3, pb: Vec3): [Vec3, Vec3] {
+  return [
+    [Math.min(pa[0], pb[0]), Math.min(pa[1], pb[1]), Math.min(pa[2], pb[2])],
+    [Math.max(pa[0], pb[0]), Math.max(pa[1], pb[1]), Math.max(pa[2], pb[2])],
+  ];
+}
+
+function nearFaces(interiors: InteriorFace[], lo: Vec3, hi: Vec3, r: number): number[] | null {
+  if (interiors.length < 256) return null;
+  return queryBoxIndex(faceIndexOf(interiors), lo, hi, r);
+}
+// ---- 시트 질의용 격자 색인 끝 ----
+
 function collectInteriorFaces(mesh: MeshData, incidence: EdgeIncidence): InteriorFace[] {
   const out: InteriorFace[] = [];
   const { indices } = mesh;
@@ -1516,7 +1699,10 @@ function projectOntoSheet(
   isolate: boolean = true,
 ): { q: Vec3; dist: number; inside: boolean } | null {
   let best: { q: Vec3; dist: number; inside: boolean } | null = null;
-  for (const tri of interiors) {
+  const cand = nearFaces(interiors, p, p, cap);
+  const n = cand ? cand.length : interiors.length;
+  for (let ci = 0; ci < n; ci++) {
+    const tri = interiors[cand ? cand[ci] : ci];
     if (skipIsolated(tri, leftoverV, isolate)) continue;
     if (!orientOk(tri.n, seedN, mode)) continue;
     const hit = closestPointOnTriangle(p, tri.pu, tri.pv, tri.pw);
@@ -1540,7 +1726,11 @@ function faceShadowCover(
   isolate: boolean = true,
 ): number {
   const intervals: [number, number][] = [];
-  for (const tri of interiors) {
+  const [slo, shi] = segBox(pa, pb);
+  const cand = nearFaces(interiors, slo, shi, cap);
+  const n = cand ? cand.length : interiors.length;
+  for (let ci = 0; ci < n; ci++) {
+    const tri = interiors[cand ? cand[ci] : ci];
     if (skipIsolated(tri, leftoverV, isolate)) continue;
     if (!orientOk(tri.n, seedN, mode)) continue;
     const d = Math.min(
@@ -1577,7 +1767,11 @@ function collectInteriorEdges(interiors: InteriorFace[]): { p: Vec3; q: Vec3; n:
   return out;
 }
 
-function recapDrawnChains(mesh: MeshData, maxCommits: number): { mesh: MeshData; commits: number } {
+function recapDrawnChains(
+  mesh: MeshData,
+  maxCommits: number,
+  budgetMs = Number.POSITIVE_INFINITY,
+): { mesh: MeshData; commits: number } {
   const drawn = listDrawnLeftoverEdges(mesh);
   if (drawn.length < 2) return { mesh, commits: 0 };
   const chains = openChainsFromEdges(drawn).filter((v) => v.length >= 3 && v.length <= MAX_RECAP_VERTS);
@@ -1586,8 +1780,9 @@ function recapDrawnChains(mesh: MeshData, maxCommits: number): { mesh: MeshData;
   let commits = 0;
   let beforeNm = buildTopology(working).nonManifoldEdgeCount;
   let before1 = buildTopology(working).boundaryEdgeCount;
+  const t0 = Date.now();
   for (const verts of chains) {
-    if (commits >= maxCommits) break;
+    if (commits >= maxCommits || Date.now() - t0 >= budgetMs) break;
     if (new EdgeIncidence(working).count(verts[0], verts[verts.length - 1]) >= 2) continue;
     const faces = facesOfEdge(working, verts[0], verts[1]);
     if (faces.length === 0) continue;
@@ -1660,15 +1855,15 @@ function leftoverLooksAttached(
   const drawCap = mean * STRIP_DRAW;
   const mid: Vec3 = [(pa[0] + pb[0]) * 0.5, (pa[1] + pb[1]) * 0.5, (pa[2] + pb[2]) * 0.5];
   const abLen = length(sub(pb, pa));
-  const flipHit = nearestSheetHit(mid, seedN, leftoverV, interiors, 'flip', false);
+  const flipHit = nearestSheetHit(mid, seedN, leftoverV, interiors, 'flip', false, mean * Math.max(STRIP_OFFSET, STRIP_DRAW));
   if (flipHit && flipHit.kind === 'face' && flipHit.dist <= drawCap) return 'flipped';
 
   const sharesA = vertexOnInterior(a, interiors);
   const sharesB = vertexOnInterior(b, interiors);
   const faceShares = leftoverFaceSharesSheet(leftoverV, interiors);
-  const hitA = nearestSheetHit(pa, seedN, leftoverV, interiors, 'any', false);
-  const hitB = nearestSheetHit(pb, seedN, leftoverV, interiors, 'any', false);
-  const hitM = nearestSheetHit(mid, seedN, leftoverV, interiors, 'any', false);
+  const hitA = nearestSheetHit(pa, seedN, leftoverV, interiors, 'any', false, mean * Math.max(STRIP_OFFSET, STRIP_DRAW));
+  const hitB = nearestSheetHit(pb, seedN, leftoverV, interiors, 'any', false, mean * Math.max(STRIP_OFFSET, STRIP_DRAW));
+  const hitM = nearestSheetHit(mid, seedN, leftoverV, interiors, 'any', false, mean * Math.max(STRIP_OFFSET, STRIP_DRAW));
   const endsOnSheet = !!(hitA && hitA.dist <= drawCap && hitB && hitB.dist <= drawCap);
   const midOnSheet = !!(hitM && hitM.kind !== 'vertex' && hitM.dist <= mean * STRIP_OFFSET);
   const midCoplanar = !!(hitM && hitM.kind === 'face' && hitM.dist <= drawCap);
@@ -1678,7 +1873,7 @@ function leftoverLooksAttached(
   }
   if ((sharesA || sharesB || endsOnSheet) && (abLen <= mean * 2 || midCoplanar) && midOnSheet) return 'isolation';
   if (sharesA && sharesB) {
-    const sameHit = nearestSheetHit(mid, seedN, leftoverV, interiors, 'same', false);
+    const sameHit = nearestSheetHit(mid, seedN, leftoverV, interiors, 'same', false, mean * Math.max(STRIP_OFFSET, STRIP_DRAW));
     if (sameHit && sameHit.dist <= drawCap) return 'isolation';
   }
   return null;
@@ -1692,10 +1887,18 @@ function leftoverFaceSharesSheet(leftoverV: Set<number>, interiors: InteriorFace
 }
 
 function vertexOnInterior(v: number, interiors: InteriorFace[]): boolean {
-  for (const tri of interiors) {
-    if (tri.u === v || tri.v === v || tri.w === v) return true;
+  let cached = sheetVertexSet.get(interiors);
+  if (!cached || cached.count !== interiors.length) {
+    const set = new Set<number>();
+    for (const tri of interiors) {
+      set.add(tri.u);
+      set.add(tri.v);
+      set.add(tri.w);
+    }
+    cached = { count: interiors.length, set };
+    sheetVertexSet.set(interiors, cached);
   }
-  return false;
+  return cached.set.has(v);
 }
 
 function nearestSheetHit(
@@ -1705,8 +1908,23 @@ function nearestSheetHit(
   interiors: InteriorFace[],
   mode: OrientMode,
   isolate: boolean,
+  radius: number = Infinity,
 ): { dist: number; kind: 'vertex' | 'edge' | 'face' } | null {
   let best: { dist: number; kind: 'vertex' | 'edge' | 'face' } | null = null;
+  // 호출부는 결과를 radius 이하 거리와만 비교한다. radius 안에 아무것도 없으면
+  // "멀다"는 뜻의 표식을 돌려준다(원래도 radius 밖의 최근접은 모두 '멀다'로 처리됨).
+  const cand = Number.isFinite(radius) ? nearFaces(interiors, p, p, radius) : null;
+  if (cand) {
+    for (const i of cand) {
+      const tri = interiors[i];
+      if (skipIsolated(tri, leftoverV, isolate)) continue;
+      if (!orientOk(tri.n, seedN, mode)) continue;
+      const hit = closestPointOnTriangle(p, tri.pu, tri.pv, tri.pw);
+      if (!best || hit.dist < best.dist) best = { dist: hit.dist, kind: hit.kind };
+    }
+    if (best) return best;
+    return interiors.length === 0 ? null : { dist: Infinity, kind: 'vertex' };
+  }
   for (const tri of interiors) {
     if (skipIsolated(tri, leftoverV, isolate)) continue;
     if (!orientOk(tri.n, seedN, mode)) continue;
@@ -1739,7 +1957,10 @@ function leftoverHugSheet(
 function nearestSheetNormal(p: Vec3, leftoverV: Set<number>, interiors: InteriorFace[], cap: number): Vec3 | null {
   let best: Vec3 | null = null;
   let bestD = cap;
-  for (const tri of interiors) {
+  const cand = nearFaces(interiors, p, p, cap);
+  const n = cand ? cand.length : interiors.length;
+  for (let ci = 0; ci < n; ci++) {
+    const tri = interiors[cand ? cand[ci] : ci];
     if (leftoverV.has(tri.u) || leftoverV.has(tri.v) || leftoverV.has(tri.w)) continue;
     const hit = closestPointOnTriangle(p, tri.pu, tri.pv, tri.pw);
     if (hit.dist <= bestD) {
@@ -1787,7 +2008,11 @@ function hugWithSeed(
   let near = Infinity;
   let nearN = seedN;
   const edgeHits: { t0: number; t1: number; n: Vec3; d: number }[] = [];
-  for (const edge of interiorEdges) {
+  const [elo, ehi] = segBox(pa, pb);
+  const ecand = interiorEdges.length < 256 ? null : queryBoxIndex(edgeIndexOf(interiorEdges), elo, ehi, coverCap);
+  const en = ecand ? ecand.length : interiorEdges.length;
+  for (let ci = 0; ci < en; ci++) {
+    const edge = interiorEdges[ecand ? ecand[ci] : ci];
     if (leftoverV.has(edge.u) || leftoverV.has(edge.v)) continue;
     const d = segmentSegmentDist(pa, pb, edge.p, edge.q);
     if (d > coverCap) continue;

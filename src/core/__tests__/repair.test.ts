@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPipeline } from '../pipeline.ts';
+import { runPipeline, type PipelineOptions } from '../pipeline.ts';
+import type { MeshData } from '../types.ts';
 import { buildTopology } from '../halfEdge.ts';
 import { EdgeIncidence } from '../incidence.ts';
 import { splitNonManifold } from '../splitNonManifold.ts';
@@ -9,6 +10,12 @@ import { applyLeftoverSurgeries, collapseOneShortUnmatched, insertOneConstrained
 import { zipSameOrientationCracks } from '../crackZip.ts';
 import { nonManifoldFan, nonManifoldFin, openCube, planeWithPinhole, gappedQuads, twoFaceVNotch, wideSlit, distantParallelSlit, danglingOverInterior, overlappingFlapOnFace, tJunctionOnDiagonal, duplicatedSeamQuads, shortUnmatchedSliver, offsetCrackOnSheet, offsetLayersNoSharedEdge, longRimShortInteriorOverlap, longRimShadowChain, largeFaceLeftoverSliver, leftoverConstrainedInsert, leftoverGapStrip, leftoverGapStripTwoFaces, leftoverGapStripFlipped, leftoverSheetSpokeSplit, leftoverBowedChord, leftoverBowedChain6 } from '../__fixtures__/shapes.ts';
 import { triangleCount } from '../types.ts';
+
+
+/** 이 파일은 구멍 메우기의 세부 동작을 본다. 자동 선택이 솔리드화로 바꾸지 않게 고정한다. */
+function runPatch(mesh: MeshData, options: PipelineOptions = {}) {
+  return runPipeline(mesh, { engine: 'patch', ...options });
+}
 
 describe('비다양체 분리', () => {
   it('면 셋이 공유하던 에지의 고립된 여분 면을 제거해 비다양체를 없앤다', () => {
@@ -37,14 +44,14 @@ describe('비다양체 가드', () => {
   });
 
   it('열린 정육면체를 메워도 비다양체 에지가 생기지 않는다', () => {
-    const result = runPipeline(openCube());
+    const result = runPatch(openCube());
     expect(result.repaired.watertight).toBe(true);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
     expect(result.repairedScore.total).toBe(100);
   });
 
   it('면이 셋인 에지로 끊긴 테두리를 skip으로 남기지 않는다', () => {
-    const result = runPipeline(nonManifoldFan());
+    const result = runPatch(nonManifoldFan());
     expect(result.holes.every((hole) => hole.appliedStrategy !== 'skip' || hole.addedTriangles > 0)).toBe(
       true,
     );
@@ -52,7 +59,7 @@ describe('비다양체 가드', () => {
 
   it('이미 면이 둘인 변을 끼운 V자 찢김에도 삼각형을 붙인다', () => {
     const before = buildTopology(twoFaceVNotch());
-    const result = runPipeline(twoFaceVNotch());
+    const result = runPatch(twoFaceVNotch());
     const filled = result.holes.filter((hole) => hole.appliedStrategy !== 'collapse');
     expect(filled.some((hole) => hole.addedTriangles > 0)).toBe(true);
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
@@ -61,7 +68,7 @@ describe('비다양체 가드', () => {
   it('지퍼가 안 닿는 균열에도 삼각형을 붙여 1-face 테두리를 줄인다', () => {
     const before = buildTopology(wideSlit());
     expect(before.boundaryEdgeCount).toBeGreaterThan(0);
-    const result = runPipeline(wideSlit());
+    const result = runPatch(wideSlit());
     expect(result.holes.every((hole) => hole.appliedStrategy !== 'skip' || hole.addedTriangles > 0)).toBe(
       true,
     );
@@ -70,19 +77,19 @@ describe('비다양체 가드', () => {
 
   it('멀리 떨어진 평행 입술도 면내 가드를 통과하면 1-face가 줄어든다', () => {
     const before = buildTopology(distantParallelSlit());
-    const result = runPipeline(distantParallelSlit());
+    const result = runPatch(distantParallelSlit());
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
-    expect(result.remainingFillEdges.length).toBeLessThanOrEqual(result.repaired.boundaryEdgeCount);
+    expect(listDrawnLeftoverEdges(result.mesh).length).toBeLessThanOrEqual(result.repaired.boundaryEdgeCount);
   });
 });
 
 describe('미세 구멍 붕괴', () => {
   it('큰 평면에 난 핀홀은 삼각형을 넣지 않고 한 점으로 모은다', () => {
-    const result = runPipeline(planeWithPinhole());
+    const result = runPatch(planeWithPinhole());
     const collapsed = result.holes.filter((h) => h.appliedStrategy === 'collapse');
     expect(collapsed.length).toBeGreaterThan(0);
     expect(collapsed.every((h) => h.addedTriangles === 0)).toBe(true);
-    expect(result.repairSummary.collapsedHoles).toBeGreaterThan(0);
+    expect(result.patch!.repairSummary.collapsedHoles).toBeGreaterThan(0);
     expect(result.repaired.watertight).toBe(true);
   });
 });
@@ -95,9 +102,9 @@ describe('기존 표면 부착', () => {
     expect(attached.collapsedSlits + attached.snappedToInterior + attached.deletedFlaps).toBeGreaterThan(0);
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBe(0);
 
-    const result = runPipeline(danglingOverInterior());
+    const result = runPatch(danglingOverInterior());
     expect(result.repaired.boundaryEdgeCount).toBe(0);
-    expect(result.remainingFillEdges).toHaveLength(0);
+    expect(listDrawnLeftoverEdges(result.mesh)).toHaveLength(0);
   });
 
   it('안쪽 면 위에 겹친 여분 삼각형은 지우고 본 시트는 닫아 둔다', () => {
@@ -107,10 +114,10 @@ describe('기존 표면 부착', () => {
     expect(dropped.count).toBeGreaterThan(0);
     expect(buildTopology(dropped.mesh).boundaryEdgeCount).toBe(0);
 
-    const result = runPipeline(overlappingFlapOnFace());
+    const result = runPatch(overlappingFlapOnFace());
     expect(result.repaired.watertight).toBe(true);
     expect(result.repaired.boundaryEdgeCount).toBe(0);
-    expect(result.repairSummary.deletedFlaps).toBeGreaterThan(0);
+    expect(result.patch!.repairSummary.deletedFlaps).toBeGreaterThan(0);
   });
 
   it('대각선 위 T자 정점은 안쪽 에지를 가른 뒤 1-face가 줄어든다', () => {
@@ -124,7 +131,7 @@ describe('기존 표면 부착', () => {
     expect(attached.snappedTJunctions).toBeGreaterThan(0);
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(tJunctionOnDiagonal());
+    const result = runPatch(tJunctionOnDiagonal());
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
   });
 
@@ -140,7 +147,7 @@ describe('기존 표면 부착', () => {
     expect(attached.zippedCracks).toBeGreaterThan(0);
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(duplicatedSeamQuads());
+    const result = runPatch(duplicatedSeamQuads());
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
   });
@@ -173,7 +180,7 @@ describe('기존 표면 부착', () => {
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBe(0);
     expect(buildTopology(attached.mesh).nonManifoldEdgeCount).toBe(0);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.watertight).toBe(true);
     expect(result.repaired.boundaryEdgeCount).toBe(0);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
@@ -194,7 +201,7 @@ describe('기존 표면 부착', () => {
     expect(attached.spatialZipCommits + attached.cavityCommits).toBeGreaterThan(0);
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBe(0);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.watertight).toBe(true);
     expect(result.repaired.boundaryEdgeCount).toBe(0);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
@@ -215,7 +222,7 @@ describe('기존 표면 부착', () => {
     expect(attached.subsegmentZipCommits + attached.spatialZipCommits + attached.cavityCommits).toBeGreaterThan(0);
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.watertight).toBe(true);
     expect(result.repaired.boundaryEdgeCount).toBe(0);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
@@ -236,7 +243,7 @@ describe('기존 표면 부착', () => {
     expect(attached.polylineZipCommits + attached.spatialZipCommits + attached.cavityCommits + attached.insertCommits).toBeGreaterThan(0);
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
   });
@@ -261,7 +268,7 @@ describe('기존 표면 부착', () => {
     const attached = attachToExistingSurface(source);
     expect(buildTopology(attached.mesh).boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
   });
@@ -285,7 +292,7 @@ describe('기존 표면 부착', () => {
     expect(buildTopology(surgery.mesh).boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
     expect(buildTopology(surgery.mesh).nonManifoldEdgeCount).toBe(0);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
   });
@@ -310,9 +317,9 @@ describe('기존 표면 부착', () => {
     expect(buildTopology(surgery.mesh).nonManifoldEdgeCount).toBe(0);
     expect(listDrawnLeftoverEdges(surgery.mesh).length).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
-    expect(result.remainingFillEdges.length).toBeLessThan(before.boundaryEdgeCount);
+    expect(listDrawnLeftoverEdges(result.mesh).length).toBeLessThan(before.boundaryEdgeCount);
   });
 
   it('두 안쪽 삼각형을 가로지르는 leftover는 그림자 체인 갭 띠로 붙인다', () => {
@@ -370,11 +377,11 @@ describe('기존 표면 부착', () => {
     expect(hasTri(surgery.mesh, topB)).toBe(true);
     expect(listDrawnLeftoverEdges(surgery.mesh).length).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
     expect(hasTri(result.mesh, topA)).toBe(true);
     expect(hasTri(result.mesh, topB)).toBe(true);
-    expect(result.remainingFillEdges.length).toBeLessThan(before.boundaryEdgeCount);
+    expect(listDrawnLeftoverEdges(result.mesh).length).toBeLessThan(before.boundaryEdgeCount);
   });
 
   it('시트 정점 둘을 잇는 휜 leftover 현은 찢김으로 그리지 않는다', () => {
@@ -391,11 +398,11 @@ describe('기존 표면 부착', () => {
     expect(hasTri(surgery.mesh, topB)).toBe(true);
     expect(listDrawnLeftoverEdges(surgery.mesh).length).toBeLessThan(before.boundaryEdgeCount);
 
-    const result = runPipeline(source);
+    const result = runPatch(source);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
     expect(hasTri(result.mesh, topA)).toBe(true);
     expect(hasTri(result.mesh, topB)).toBe(true);
-    expect(result.remainingFillEdges.length).toBeLessThan(before.boundaryEdgeCount);
+    expect(listDrawnLeftoverEdges(result.mesh).length).toBeLessThan(before.boundaryEdgeCount);
   });
 
   it('시트 정점 둘을 잇는 leftover 열린 사슬은 찢김으로 그리지 않는다', () => {

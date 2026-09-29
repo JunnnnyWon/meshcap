@@ -13,13 +13,21 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { availableParallelism, loadavg, totalmem } from 'node:os';
-import { runPipeline } from '../src/core/pipeline.ts';
+import { runPipelineAsync } from '../src/core/pipeline.ts';
 import { decodeRepairRequest, encodeRepairResponse } from '../src/net/protocol.ts';
+import { createNodeFieldEvaluator } from './fieldPool.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
 // 삼각형 삼백만 개면 좌표와 인덱스만 150메가바이트다. 넉넉하게 잡되 무한은 아니다.
 const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES ?? 512 * 1024 * 1024);
+// Cloudflare는 오리진 응답을 125초까지만 기다린다(Enterprise 외에는 못 늘린다).
+// 구멍 메우기의 남은 틈 정리는 병적인 입력에서 혼자 수 분을 먹을 수 있어,
+// 나머지 단계와 응답 전송을 감안해 이만큼만 쓴다. 솔리드화에는 쓰지 않는다.
+const CAP_BUDGET_MS = Number(process.env.CAP_BUDGET_MS ?? 40_000);
+// 솔리드화의 와인딩 넘버 격자는 보조 스레드로 나눠 계산한다. 값은 한 스레드와 같다.
+const FIELD_THREADS = Number(process.env.FIELD_THREADS ?? Math.max(1, Math.min(8, availableParallelism() - 1)));
+const evaluateField = createNodeFieldEvaluator(FIELD_THREADS);
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -85,11 +93,17 @@ const server = createServer(async (req, res) => {
     const { mesh, options } = decodeRepairRequest(buffer);
     const triangles = mesh.indices.length / 3;
 
-    // 브라우저는 96³, 서버는 같은 코어에 랩 해상도만 높인다.
-    const result = runPipeline(mesh, {
-      ...options,
-      wrapResolution: options.wrapResolution ?? 160,
-    });
+    // 구멍 메우기에서 브라우저는 96³, 서버는 같은 코어에 랩 해상도만 높인다.
+    const result = await runPipelineAsync(
+      mesh,
+      {
+        ...options,
+        wrapResolution: options.wrapResolution ?? 160,
+        capBudgetMs: Math.min(options.capBudgetMs ?? CAP_BUDGET_MS, CAP_BUDGET_MS),
+      },
+      undefined,
+      evaluateField,
+    );
     const payload = encodeRepairResponse(result);
 
     res.writeHead(200, {
@@ -100,8 +114,8 @@ const server = createServer(async (req, res) => {
     res.end(Buffer.from(payload));
 
     console.log(
-      `repair 삼각형 ${triangles.toLocaleString('ko-KR')} · ` +
-        `${result.weldedScore.total}→${result.repairedScore.total}점 · ` +
+      `repair 삼각형 ${triangles.toLocaleString('ko-KR')} · ${result.engine} · ` +
+        `${result.inputScore.total}→${result.repairedScore.total}점 · ` +
         `${Date.now() - startedAt}ms · 응답 ${(payload.byteLength / 1024 / 1024).toFixed(1)}MB`,
     );
   } catch (error) {
@@ -117,7 +131,7 @@ server.requestTimeout = 10 * 60 * 1000;
 server.headersTimeout = 60 * 1000;
 
 server.listen(PORT, HOST, () => {
-  console.log(`MeshCap 연산 서버 http://${HOST}:${PORT} · 코어 ${availableParallelism()}개`);
+  console.log(`MeshCap 연산 서버 http://${HOST}:${PORT} · 코어 ${availableParallelism()}개 · 격자 스레드 ${FIELD_THREADS}개`);
 });
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {

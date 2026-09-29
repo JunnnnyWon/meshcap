@@ -26,13 +26,16 @@ describe('연산 서버 프로토콜', () => {
     const decoded = decodeRepairResponse(encodeRepairResponse(result));
 
     expect(decoded.repairedScore.total).toBe(result.repairedScore.total);
-    expect(decoded.weldedScore.total).toBe(result.weldedScore.total);
+    expect(decoded.inputScore.total).toBe(result.inputScore.total);
+    expect(decoded.engine).toBe(result.engine);
     expect(decoded.repaired.watertight).toBe(result.repaired.watertight);
     expect(decoded.holes.length).toBe(result.holes.length);
     expect(decoded.holes[0].appliedStrategy).toBe(result.holes[0].appliedStrategy);
     expect(decoded.mesh.positions).toEqual(result.mesh.positions);
     expect(decoded.mesh.indices).toEqual(result.mesh.indices);
-    expect(decoded.weldedMesh.indices).toEqual(result.weldedMesh.indices);
+    expect(decoded.inputMesh.indices).toEqual(result.inputMesh.indices);
+    expect(decoded.beforeDefectEdges).toEqual(result.beforeDefectEdges);
+    expect(decoded.afterDefectEdges).toEqual(result.afterDefectEdges);
   });
 
   it('JSON 길이와 무관하게 배열이 4바이트 경계에 놓인다', () => {

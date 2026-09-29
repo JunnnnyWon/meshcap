@@ -43,11 +43,11 @@ export interface ViewerMeshInput {
   before: MeshData;
   after: MeshData;
   /** after 메시에서 이 인덱스부터가 새로 만든 삼각형이다. */
-  capTriangleStart: number;
-  /** before 메시 기준의 구멍 테두리 정점 인덱스 목록. */
-  loops: number[][];
-  /** after 메시에 남은 1-face 에지. 2정점 사슬 포함. */
-  remainingEdges?: number[][];
+  newTriangleStart: number;
+  /** before 메시의 열린 모서리와 겹친 모서리. [a0, b0, a1, b1, ...] */
+  beforeEdges: Uint32Array;
+  /** after 메시에 남은 열린 모서리와 겹친 모서리. */
+  afterEdges: Uint32Array;
   upAxis: UpAxis;
 }
 
@@ -71,6 +71,7 @@ export class MeshViewer {
   private surfaceWireMaterial: MeshBasicMaterial;
   private capWireMaterial: MeshBasicMaterial;
   private holeMaterial: LineMaterial;
+  private remainingMaterial: LineMaterial;
 
   private mode: ViewMode = 'before';
   private wireframe = false;
@@ -159,6 +160,7 @@ export class MeshViewer {
       transparent: true,
       opacity: 0.95,
     });
+    this.remainingMaterial = this.holeMaterial.clone();
 
     this.animate();
   }
@@ -182,7 +184,7 @@ export class MeshViewer {
     this.content.add(this.beforeWire);
 
     const afterGeometry = toGeometry(input.after);
-    const capStartIndex = input.capTriangleStart * 3;
+    const capStartIndex = input.newTriangleStart * 3;
     afterGeometry.clearGroups();
     afterGeometry.addGroup(0, capStartIndex, 0);
     afterGeometry.addGroup(capStartIndex, input.after.indices.length - capStartIndex, 1);
@@ -193,9 +195,12 @@ export class MeshViewer {
     this.content.add(this.afterMesh);
     this.content.add(this.afterWire);
 
-    this.holeLines = buildLoopLines(input.before, input.loops, this.holeMaterial);
+    // 결함 모서리가 수만 개면 굵은 선이 모델을 덮어 모양이 안 보인다. 많을수록 가늘게 그린다.
+    this.holeMaterial.linewidth = lineWidthFor(input.beforeEdges.length / 2);
+    this.remainingMaterial.linewidth = lineWidthFor(input.afterEdges.length / 2);
+    this.holeLines = buildPairLines(input.before, input.beforeEdges, this.holeMaterial);
     if (this.holeLines) this.content.add(this.holeLines);
-    this.remainingLines = buildLoopLines(input.after, input.remainingEdges ?? [], this.holeMaterial);
+    this.remainingLines = buildPairLines(input.after, input.afterEdges, this.remainingMaterial);
     if (this.remainingLines) this.content.add(this.remainingLines);
 
     this.grid = buildBedGrid(bounds, AXIS_INDEX[input.upAxis]);
@@ -269,6 +274,7 @@ export class MeshViewer {
 
     // 화면 공간 굵기 계산에 필요하다. 갱신하지 않으면 창 크기를 바꿀 때 선이 뒤틀린다.
     this.holeMaterial.resolution = new Vector2(width, height);
+    this.remainingMaterial.resolution = new Vector2(width, height);
   }
 
   dispose(): void {
@@ -281,6 +287,7 @@ export class MeshViewer {
     this.surfaceWireMaterial.dispose();
     this.capWireMaterial.dispose();
     this.holeMaterial.dispose();
+    this.remainingMaterial.dispose();
     this.renderer.dispose();
   }
 
@@ -358,6 +365,12 @@ export class MeshViewer {
   };
 }
 
+function lineWidthFor(edges: number): number {
+  if (edges > 20_000) return 0.9;
+  if (edges > 5_000) return 1.4;
+  return 2.4;
+}
+
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
@@ -370,27 +383,15 @@ function toGeometry(mesh: MeshData): BufferGeometry {
   return geometry;
 }
 
-function buildLoopLines(
-  mesh: MeshData,
-  loops: number[][],
-  material: LineMaterial,
-): LineSegments2 | null {
-  if (loops.length === 0) return null;
+function buildPairLines(mesh: MeshData, pairs: Uint32Array, material: LineMaterial): LineSegments2 | null {
+  if (pairs.length === 0) return null;
 
-  const points: number[] = [];
-  for (const loop of loops) {
-    for (let i = 0; i < loop.length; i++) {
-      const a = loop[i] * 3;
-      const b = loop[(i + 1) % loop.length] * 3;
-      points.push(
-        mesh.positions[a],
-        mesh.positions[a + 1],
-        mesh.positions[a + 2],
-        mesh.positions[b],
-        mesh.positions[b + 1],
-        mesh.positions[b + 2],
-      );
-    }
+  const points = new Float32Array(pairs.length * 3);
+  for (let i = 0; i < pairs.length; i++) {
+    const v = pairs[i] * 3;
+    points[i * 3] = mesh.positions[v];
+    points[i * 3 + 1] = mesh.positions[v + 1];
+    points[i * 3 + 2] = mesh.positions[v + 2];
   }
 
   const geometry = new LineSegmentsGeometry();

@@ -96,6 +96,12 @@ const T_TMIN = 0.08;
 const T_TMAX = 0.92;
 const MAX_T_ITERS = 12;
 const T_BATCH = 24;
+/** 삼각형·선분을 걸친 칸 모두에 넣는 상한. 이보다 크면 대표 칸 몇 개에만 넣는다. */
+const REGISTER_ALL_CELLS = 4096;
+/** 격자 등록 총량 상한. 큰 면이 많은 입력에서 메모리가 폭증하지 않게 넘으면 대표 칸만 쓴다. */
+function registrationBudget(items: number): number {
+  return Math.max(4_000_000, items * 32);
+}
 
 /**
  * 짝을 못 찾는 1-face 에지를 기존 안쪽 표면에 붙인다.
@@ -103,8 +109,14 @@ const T_BATCH = 24;
  * 짧은 핀 슬릿은 양 끝점을 한 점으로 모은다. 나머지는 면이 둘인 안쪽
  * 삼각형 위로 투영해 분할한 뒤 용접한다. 다른 테두리와는 짝을 짓지 않는다.
  */
-export function attachToExistingSurface(mesh: MeshData): SurfaceAttachResult {
+export function attachToExistingSurface(
+  mesh: MeshData,
+  budgetMs = Number.POSITIVE_INFINITY,
+): SurfaceAttachResult {
   let working = mesh;
+  const t0 = Date.now();
+  const over = () => Date.now() - t0 >= budgetMs;
+  const left = () => Math.max(0, budgetMs - (Date.now() - t0));
   let collapsedSlits = 0;
   let snapped = 0;
   let deletedFlaps = 0;
@@ -128,36 +140,37 @@ export function attachToExistingSurface(mesh: MeshData): SurfaceAttachResult {
   let stripBudgetHit = false;
   let wrappedTriangles = 0;
 
-  const dropped = dropOverlappingFlaps(working);
+  const dropped = over() ? { mesh: working, count: 0 } : dropOverlappingFlaps(working);
   if (dropped.count > 0 && oneFaceCount(dropped.mesh) < oneFaceCount(working)) {
     working = dropped.mesh;
     deletedFlaps += dropped.count;
   }
 
-  const first = collapseIsolatedSlits(working);
+  const first = over() ? { mesh: working, count: 0 } : collapseIsolatedSlits(working);
   if (first.count > 0 && oneFaceCount(first.mesh) < oneFaceCount(working)) {
     working = first.mesh;
     collapsedSlits += first.count;
   }
 
   for (let i = 0; i < MAX_T_ITERS; i++) {
+    if (over()) break;
     const before = oneFaceCount(working);
     const one = snapTJunctions(working, T_BATCH);
     if (one.count === 0 || oneFaceCount(one.mesh) >= before) break;
     working = one.mesh;
     snappedTJunctions += one.count;
-    const afterT = dropOverlappingFlaps(working);
+    const afterT = over() ? { mesh: working, count: 0 } : dropOverlappingFlaps(working);
     if (afterT.count > 0 && oneFaceCount(afterT.mesh) < oneFaceCount(working)) {
       working = afterT.mesh;
       deletedFlaps += afterT.count;
     }
   }
 
-  const cracks = zipSameOrientationCracks(working);
+  const cracks = over() ? { mesh: working, zippedCracks: 0 } : zipSameOrientationCracks(working);
   if (cracks.zippedCracks > 0 && oneFaceCount(cracks.mesh) < oneFaceCount(working)) {
     working = cracks.mesh;
     zippedCracks += cracks.zippedCracks;
-    const afterCrack = dropOverlappingFlaps(working);
+    const afterCrack = over() ? { mesh: working, count: 0 } : dropOverlappingFlaps(working);
     if (afterCrack.count > 0 && oneFaceCount(afterCrack.mesh) < oneFaceCount(working)) {
       working = afterCrack.mesh;
       deletedFlaps += afterCrack.count;
@@ -165,6 +178,7 @@ export function attachToExistingSurface(mesh: MeshData): SurfaceAttachResult {
   }
 
   for (let i = 0; i < MAX_FLAP_ITERS; i++) {
+    if (over()) break;
     const before = oneFaceCount(working);
     const one = snapDanglingVerts(working, { allowOnSurface: false, limit: 64 });
     if (one.count === 0) break;
@@ -173,6 +187,7 @@ export function attachToExistingSurface(mesh: MeshData): SurfaceAttachResult {
     snapped += one.count;
   }
   for (let i = 0; i < MAX_EDGE_ITERS; i++) {
+    if (over()) break;
     const before = oneFaceCount(working);
     const batch = stitchIsolatedToInterior(working, 8);
     if (batch.count === 0) break;
@@ -187,37 +202,59 @@ export function attachToExistingSurface(mesh: MeshData): SurfaceAttachResult {
     snapped += one.count;
   }
 
-  const last = collapseIsolatedSlits(working);
+  const last = over() ? { mesh: working, count: 0 } : collapseIsolatedSlits(working);
   if (last.count > 0 && oneFaceCount(last.mesh) < oneFaceCount(working)) {
     working = last.mesh;
     collapsedSlits += last.count;
   }
 
   for (let i = 0; i < MAX_T_ITERS; i++) {
+    if (over()) break;
     const before = oneFaceCount(working);
     const one = snapTJunctions(working, T_BATCH);
     if (one.count === 0 || oneFaceCount(one.mesh) >= before) break;
     working = one.mesh;
     snappedTJunctions += one.count;
-    const afterT = dropOverlappingFlaps(working);
+    const afterT = over() ? { mesh: working, count: 0 } : dropOverlappingFlaps(working);
     if (afterT.count > 0 && oneFaceCount(afterT.mesh) < oneFaceCount(working)) {
       working = afterT.mesh;
       deletedFlaps += afterT.count;
     }
   }
 
-  const lateCracks = zipSameOrientationCracks(working);
+  const lateCracks = over() ? { mesh: working, zippedCracks: 0 } : zipSameOrientationCracks(working);
   if (lateCracks.zippedCracks > 0 && oneFaceCount(lateCracks.mesh) < oneFaceCount(working)) {
     working = lateCracks.mesh;
     zippedCracks += lateCracks.zippedCracks;
-    const afterLate = dropOverlappingFlaps(working);
+    const afterLate = over() ? { mesh: working, count: 0 } : dropOverlappingFlaps(working);
     if (afterLate.count > 0 && oneFaceCount(afterLate.mesh) < oneFaceCount(working)) {
       working = afterLate.mesh;
       deletedFlaps += afterLate.count;
     }
   }
 
-  const surgery = applyLeftoverSurgeries(working);
+  const surgery = over()
+    ? {
+        mesh: working,
+        collapsedShort: 0,
+        overlapReplaces: 0,
+        cavityCommits: 0,
+        spatialZipCommits: 0,
+        subsegmentZipCommits: 0,
+        polylineZipCommits: 0,
+        sliverCutCommits: 0,
+        insertCommits: 0,
+        stripCommits: 0,
+        stripMultiCommits: 0,
+        stripFarCommits: 0,
+        leftoverZipCommits: 0,
+        sheetSplitCommits: 0,
+        stripBowCommits: 0,
+        chainRecapCommits: 0,
+        stripBudgetHit: false,
+        wrappedTriangles: 0,
+      }
+    : applyLeftoverSurgeries(working, left());
   const surgeryHits = surgery.collapsedShort + surgery.overlapReplaces + surgery.cavityCommits + surgery.spatialZipCommits + surgery.subsegmentZipCommits + surgery.polylineZipCommits + surgery.sliverCutCommits + surgery.insertCommits + surgery.stripCommits + surgery.leftoverZipCommits + surgery.sheetSplitCommits + surgery.stripBowCommits + surgery.chainRecapCommits + surgery.wrappedTriangles;
   const surgeryNmOk = buildTopology(surgery.mesh).nonManifoldEdgeCount <= buildTopology(working).nonManifoldEdgeCount;
   const surgerySafer = oneFaceCount(surgery.mesh) < oneFaceCount(working) || ((surgery.stripCommits > 0 || surgery.sheetSplitCommits > 0 || surgery.stripBowCommits > 0 || surgery.chainRecapCommits > 0) && surgeryNmOk);
@@ -240,12 +277,12 @@ export function attachToExistingSurface(mesh: MeshData): SurfaceAttachResult {
     chainRecapCommits += surgery.chainRecapCommits;
     stripBudgetHit = stripBudgetHit || surgery.stripBudgetHit;
     wrappedTriangles += surgery.wrappedTriangles;
-    const afterS = dropOverlappingFlaps(working);
+    const afterS = over() ? { mesh: working, count: 0 } : dropOverlappingFlaps(working);
     if (afterS.count > 0 && oneFaceCount(afterS.mesh) < oneFaceCount(working)) {
       working = afterS.mesh;
       deletedFlaps += afterS.count;
     }
-    const afterCavity = zipSameOrientationCracks(working);
+    const afterCavity = over() ? { mesh: working, zippedCracks: 0 } : zipSameOrientationCracks(working);
     if (afterCavity.zippedCracks > 0 && oneFaceCount(afterCavity.mesh) < oneFaceCount(working)) {
       working = afterCavity.mesh;
       zippedCracks += afterCavity.zippedCracks;
@@ -429,7 +466,8 @@ export function dropOverlappingFlaps(mesh: MeshData): { mesh: MeshData; count: n
 
   const cell = Math.max(cap, incidence.meanLength * 0.5, 1e-12);
   const hashed = hashInteriorCells(interiors, cell);
-  const reach = Math.max(2, Math.ceil((incidence.meanLength * 8) / cell));
+  // 결과는 cap 안의 가장 가까운 면만 쓴다. 예전처럼 평균 에지 8배(33³칸)를 뒤질 이유가 없다.
+  const reach = Math.max(2, Math.ceil(cap / cell) + 1);
 
   const candidateFaces = uniqueFillFaces(topology.fillFace);
   const neighbors = flapAdjacency(mesh, candidateFaces, incidence);
@@ -575,7 +613,10 @@ function snapOneTJunction(mesh: MeshData): MeshData | null {
 
   const cell = Math.max(cap, incidence.meanLength * 0.5, 1e-12);
   const hashed = hashInteriorEdges(segs, cell);
-  const reach = Math.max(2, Math.ceil((incidence.meanLength * 8) / cell));
+  const fullReach = Math.max(2, Math.ceil((incidence.meanLength * 8) / cell));
+  // 점 질의는 cap 안만 본다. 에지 질의는 중점에서 양 끝이 cap 안인 선분을 찾으므로
+  // 에지 길이의 절반만큼 더 본다.
+  const reach = Math.min(fullReach, Math.max(2, Math.ceil(cap / cell) + 1));
   const partners = fillPartners(topology.fillFrom, topology.fillTo);
   const before = topology.boundaryEdgeCount;
 
@@ -609,9 +650,10 @@ function snapOneTJunction(mesh: MeshData): MeshData | null {
     const iz = Math.floor(mid[2] / cell);
     let best: EdgeHit | null = null;
     const seen = new Set<number>();
-    for (let dx = -reach; dx <= reach; dx++) {
-      for (let dy = -reach; dy <= reach; dy++) {
-        for (let dz = -reach; dz <= reach; dz++) {
+    const edgeReach = Math.min(fullReach, Math.max(2, Math.ceil((cap + length(ab) / 2) / cell) + 1));
+    for (let dx = -edgeReach; dx <= edgeReach; dx++) {
+      for (let dy = -edgeReach; dy <= edgeReach; dy++) {
+        for (let dz = -edgeReach; dz <= edgeReach; dz++) {
           for (let cand = hashed.table.first(hash3(ix + dx, iy + dy, iz + dz)); cand >= 0; cand = hashed.table.after(cand)) {
             const seg = segs[hashed.segOf[cand]];
             if (seen.has(seg.id) || seg.u === a || seg.v === a || seg.u === b || seg.v === b) continue;
@@ -979,6 +1021,7 @@ function hashInteriorEdges(
 ): { table: IntHashTable; segOf: Int32Array } {
   const ids: number[] = [];
   const keys: number[] = [];
+  const budget = registrationBudget(segs.length);
   const push = (ix: number, iy: number, iz: number, i: number) => {
     keys.push(hash3(ix, iy, iz));
     ids.push(i);
@@ -993,7 +1036,7 @@ function hashInteriorEdges(
     const y1 = Math.floor(Math.max(a[1], b[1]) / cell);
     const z1 = Math.floor(Math.max(a[2], b[2]) / cell);
     const span = (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
-    if (span <= 32) {
+    if (span <= REGISTER_ALL_CELLS && keys.length + span <= budget) {
       for (let ix = x0; ix <= x1; ix++) {
         for (let iy = y0; iy <= y1; iy++) {
           for (let iz = z0; iz <= z1; iz++) push(ix, iy, iz, i);
@@ -1444,6 +1487,7 @@ function hashInteriorCells(
 ): { table: IntHashTable; triOf: Int32Array } {
   const ids: number[] = [];
   const keys: number[] = [];
+  const budget = registrationBudget(interiors.length);
   const push = (ix: number, iy: number, iz: number, tri: number) => {
     keys.push(hash3(ix, iy, iz));
     ids.push(tri);
@@ -1464,7 +1508,8 @@ function hashInteriorCells(
     const y1 = Math.floor(maxy / cell);
     const z1 = Math.floor(maxz / cell);
     const span = (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
-    if (span <= 64) {
+    // 걸친 칸에 모두 넣어야 탐색 반경을 거리 한도에 맞춰 줄여도 후보를 놓치지 않는다.
+    if (span <= REGISTER_ALL_CELLS && keys.length + span <= budget) {
       for (let ix = x0; ix <= x1; ix++) {
         for (let iy = y0; iy <= y1; iy++) {
           for (let iz = z0; iz <= z1; iz++) push(ix, iy, iz, i);

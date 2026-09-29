@@ -1,6 +1,7 @@
 import { buildTopology } from './halfEdge.ts';
 import { countBoundaryLoops } from './boundary.ts';
 import { computeBounds, type MeshData } from './types.ts';
+import { countSelfIntersections } from './intersect.ts';
 
 export interface ValidationReport {
   vertexCount: number;
@@ -20,27 +21,25 @@ export interface ValidationReport {
   /** 부호 없는 부피. 법선 정렬 후에 재야 의미가 있다. */
   volume: number;
   surfaceArea: number;
-  /** 새로 만든 뚜껑이 기존 표면을 뚫고 지나간 횟수. */
-  capSelfIntersections: number;
-  /** 메시가 너무 커서 교차 검사를 건너뛰었는지. */
+  /** 메시 전체에서 서로 뚫고 지나가는 삼각형 쌍의 수. */
+  selfIntersections: number;
+  /** 관통 검사를 끝까지 했는지. false면 점수를 주지 않는다. */
   selfIntersectionChecked: boolean;
+  /** 개수가 많아 세기를 멈췄는지. true면 selfIntersections 이상이다. */
+  selfIntersectionCapped: boolean;
 }
 
 export interface ValidateOptions {
+  /** 'all'은 메시 전체의 관통을 센다. 'none'은 점수에 쓰지 않는 진단용이다. */
+  intersections?: 'all' | 'none';
+  /** 관통을 이만큼 찾으면 세기를 멈춘다. */
+  intersectionCap?: number;
   /**
-   * 뚜껑 삼각형이 시작되는 인덱스. 파이프라인은 뚜껑을 항상 뒤에 덧붙이므로
-   * 이 지점 이후만 검사하면 새로 만든 면이 기존 표면을 뚫었는지 알 수 있다.
+   * 위상 계산에서 뺀 찌그러진 삼각형 수. 정확 용접에서 꼭짓점이 겹쳐 빠진 면처럼,
+   * 입력에는 있었지만 메시에 넣을 수 없던 면을 점수에 되돌려 넣는다.
    */
-  capTriangleStart?: number;
-  /** 이 삼각형 수를 넘으면 교차 검사를 건너뛴다. */
-  selfIntersectionLimit?: number;
-  /** 뚜껑-표면 쌍을 이만큼 보면 멈춘다. 헤어처럼 면이 빽빽한 모델에서 검사가 폭주하는 일을 막는다. */
-  pairTestLimit?: number;
+  extraDegenerateTriangles?: number;
 }
-
-const DEFAULT_SELF_INTERSECTION_LIMIT = 600_000;
-/** V8 Set 한도(2^24)보다 훨씬 낮게 잡아, 쌍을 모으다 탭이 죽지 않게 한다. */
-const DEFAULT_PAIR_TEST_LIMIT = 250_000;
 
 export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): ValidationReport {
   const topology = buildTopology(mesh);
@@ -91,25 +90,24 @@ export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): Val
     volume += (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6;
   }
 
-  const limit = options.selfIntersectionLimit ?? DEFAULT_SELF_INTERSECTION_LIMIT;
-  const canCheck = options.capTriangleStart !== undefined && F <= limit;
-  let capSelfIntersections = 0;
-  let selfIntersectionChecked = canCheck;
-  if (canCheck) {
-    const intersection = countCapIntersections(
-      mesh,
-      options.capTriangleStart as number,
-      bounds.diagonal,
-      options.pairTestLimit ?? DEFAULT_PAIR_TEST_LIMIT,
-    );
-    capSelfIntersections = intersection.count;
-    // 한도에 걸렸는데 교차가 하나도 없으면, 깨끗하다고 단정하지 않는다.
-    selfIntersectionChecked = intersection.completed || intersection.count > 0;
+  const extra = options.extraDegenerateTriangles ?? 0;
+  degenerateTriangles += extra;
+  const totalTriangles = F + extra;
+
+  let selfIntersections = 0;
+  let selfIntersectionChecked = false;
+  let selfIntersectionCapped = false;
+  if ((options.intersections ?? 'all') === 'all') {
+    const result = countSelfIntersections(mesh, { cap: options.intersectionCap });
+    selfIntersections = result.count;
+    // 한도에 걸려 끝까지 못 봤다면, 이미 0점이 될 만큼 찾았을 때만 검사한 것으로 친다.
+    selfIntersectionChecked = result.complete || result.count >= 5;
+    selfIntersectionCapped = result.capped || !result.complete;
   }
 
   return {
     vertexCount: topology.vertexCount,
-    triangleCount: topology.triangleCount,
+    triangleCount: totalTriangles,
     edgeCount: topology.edgeCount,
     boundaryEdgeCount: topology.boundaryEdgeCount,
     boundaryLoopCount,
@@ -120,198 +118,11 @@ export function validateMesh(mesh: MeshData, options: ValidateOptions = {}): Val
     eulerCharacteristic: topology.eulerCharacteristic,
     watertight: topology.boundaryEdgeCount === 0,
     degenerateTriangles,
-    degenerateRatio: F > 0 ? degenerateTriangles / F : 0,
+    degenerateRatio: totalTriangles > 0 ? degenerateTriangles / totalTriangles : 0,
     volume: Math.abs(volume),
     surfaceArea,
-    capSelfIntersections,
+    selfIntersections,
     selfIntersectionChecked,
+    selfIntersectionCapped,
   };
-}
-
-/**
- * 새로 만든 뚜껑 삼각형이 기존 표면을 관통했는지 센다.
- *
- * 메시 전체의 자기교차를 찾으려면 훨씬 무거운 자료구조가 필요하지만, 실제로
- * 문제가 되는 것은 우리가 방금 만들어 넣은 면이다. 균일 격자에 삼각형을 넣고
- * 같은 칸에 든 후보끼리만 분리축 검사를 하면 뚜껑 개수에 비례하는 비용으로 끝난다.
- */
-function countCapIntersections(
-  mesh: MeshData,
-  capStart: number,
-  diagonal: number,
-  pairLimit: number,
-): { count: number; completed: boolean } {
-  const { positions, indices } = mesh;
-  const F = indices.length / 3;
-  if (capStart >= F || diagonal <= 0) return { count: 0, completed: true };
-
-  const cell = diagonal / 64;
-  const buckets = new Map<number, number[]>();
-
-  const hash = (ix: number, iy: number, iz: number) =>
-    (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(iz, 83492791)) | 0;
-
-  const triBounds = (f: number) => {
-    const o = f * 3;
-    let minX = Infinity;
-    let minY = Infinity;
-    let minZ = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    let maxZ = -Infinity;
-    for (let k = 0; k < 3; k++) {
-      const p = indices[o + k] * 3;
-      const x = positions[p];
-      const y = positions[p + 1];
-      const z = positions[p + 2];
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (z < minZ) minZ = z;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-      if (z > maxZ) maxZ = z;
-    }
-    return { minX, minY, minZ, maxX, maxY, maxZ };
-  };
-
-  for (let f = 0; f < F; f++) {
-    const b = triBounds(f);
-    const x0 = Math.floor(b.minX / cell);
-    const x1 = Math.floor(b.maxX / cell);
-    const y0 = Math.floor(b.minY / cell);
-    const y1 = Math.floor(b.maxY / cell);
-    const z0 = Math.floor(b.minZ / cell);
-    const z1 = Math.floor(b.maxZ / cell);
-
-    // 지나치게 큰 삼각형이 격자를 뒤덮는 것을 막는다.
-    if ((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > 512) continue;
-
-    for (let ix = x0; ix <= x1; ix++) {
-      for (let iy = y0; iy <= y1; iy++) {
-        for (let iz = z0; iz <= z1; iz++) {
-          const key = hash(ix, iy, iz);
-          const bucket = buckets.get(key);
-          if (bucket) bucket.push(f);
-          else buckets.set(key, [f]);
-        }
-      }
-    }
-  }
-
-  const eps = diagonal * 1e-9;
-  let count = 0;
-  let tests = 0;
-
-  for (let f = capStart; f < F; f++) {
-    const b = triBounds(f);
-    const x0 = Math.floor(b.minX / cell);
-    const x1 = Math.floor(b.maxX / cell);
-    const y0 = Math.floor(b.minY / cell);
-    const y1 = Math.floor(b.maxY / cell);
-    const z0 = Math.floor(b.minZ / cell);
-    const z1 = Math.floor(b.maxZ / cell);
-    if ((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > 512) continue;
-
-    const candidates = new Set<number>();
-    for (let ix = x0; ix <= x1; ix++) {
-      for (let iy = y0; iy <= y1; iy++) {
-        for (let iz = z0; iz <= z1; iz++) {
-          const bucket = buckets.get(hash(ix, iy, iz));
-          if (!bucket) continue;
-          for (const g of bucket) if (g !== f) candidates.add(g);
-        }
-      }
-    }
-
-    for (const g of candidates) {
-      // 뚜껑끼리의 쌍은 큰 인덱스에서만 본다. 전역 Set에 쌍을 쌓지 않는다.
-      if (g >= capStart && g >= f) continue;
-      if (sharesVertex(indices, f, g)) continue;
-      if (tests >= pairLimit) return { count, completed: false };
-      tests++;
-      if (trianglesIntersect(positions, indices, f, g, eps)) count++;
-    }
-  }
-
-  return { count, completed: true };
-}
-
-function sharesVertex(indices: Uint32Array, f: number, g: number): boolean {
-  const fo = f * 3;
-  const go = g * 3;
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 3; j++) {
-      if (indices[fo + i] === indices[go + j]) return true;
-    }
-  }
-  return false;
-}
-
-/** 분리축 정리로 두 삼각형이 겹치는지 판정한다. 면 법선 2개와 에지 외적 9개를 본다. */
-function trianglesIntersect(
-  positions: Float32Array,
-  indices: Uint32Array,
-  f: number,
-  g: number,
-  eps: number,
-): boolean {
-  const A: number[][] = [];
-  const B: number[][] = [];
-  for (let i = 0; i < 3; i++) {
-    const pa = indices[f * 3 + i] * 3;
-    A.push([positions[pa], positions[pa + 1], positions[pa + 2]]);
-    const pb = indices[g * 3 + i] * 3;
-    B.push([positions[pb], positions[pb + 1], positions[pb + 2]]);
-  }
-
-  const edgesA = [
-    [A[1][0] - A[0][0], A[1][1] - A[0][1], A[1][2] - A[0][2]],
-    [A[2][0] - A[1][0], A[2][1] - A[1][1], A[2][2] - A[1][2]],
-    [A[0][0] - A[2][0], A[0][1] - A[2][1], A[0][2] - A[2][2]],
-  ];
-  const edgesB = [
-    [B[1][0] - B[0][0], B[1][1] - B[0][1], B[1][2] - B[0][2]],
-    [B[2][0] - B[1][0], B[2][1] - B[1][1], B[2][2] - B[1][2]],
-    [B[0][0] - B[2][0], B[0][1] - B[2][1], B[0][2] - B[2][2]],
-  ];
-
-  const axes: number[][] = [
-    crossOf(edgesA[0], edgesA[1]),
-    crossOf(edgesB[0], edgesB[1]),
-  ];
-  for (const ea of edgesA) {
-    for (const eb of edgesB) axes.push(crossOf(ea, eb));
-  }
-
-  for (const axis of axes) {
-    const len = Math.hypot(axis[0], axis[1], axis[2]);
-    if (len < 1e-20) continue; // 평행한 에지에서 나오는 퇴화 축은 건너뛴다
-
-    const ax = axis[0] / len;
-    const ay = axis[1] / len;
-    const az = axis[2] / len;
-
-    let minA = Infinity;
-    let maxA = -Infinity;
-    let minB = Infinity;
-    let maxB = -Infinity;
-
-    for (let i = 0; i < 3; i++) {
-      const pa = A[i][0] * ax + A[i][1] * ay + A[i][2] * az;
-      if (pa < minA) minA = pa;
-      if (pa > maxA) maxA = pa;
-      const pb = B[i][0] * ax + B[i][1] * ay + B[i][2] * az;
-      if (pb < minB) minB = pb;
-      if (pb > maxB) maxB = pb;
-    }
-
-    // 살짝 스치는 정도는 교차로 세지 않는다.
-    if (maxA < minB + eps || maxB < minA + eps) return false;
-  }
-
-  return true;
-}
-
-function crossOf(a: number[], b: number[]): number[] {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }

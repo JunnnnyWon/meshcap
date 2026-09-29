@@ -1,20 +1,22 @@
 import type { UpAxis } from '../core/classify.ts';
 
-export const VARIANT_IDS = ['raw', 'weldOnly', 'naiveFan', 'meshcap'] as const;
+export const VARIANT_IDS = ['raw', 'naiveFan', 'patch', 'solid', 'meshcap'] as const;
 export type VariantId = (typeof VARIANT_IDS)[number];
 
 export const VARIANT_LABEL: Record<VariantId, string> = {
-  raw: '무처리',
-  weldOnly: '용접만',
+  raw: '올린 그대로',
   naiveFan: '그냥 부채꼴',
-  meshcap: 'MeshCap',
+  patch: '구멍 메우기',
+  solid: '솔리드화',
+  meshcap: 'MeshCap 자동',
 };
 
 export const VARIANT_DESCRIPTION: Record<VariantId, string> = {
-  raw: '받은 파일 그대로. 슬라이서가 처음 받는 상태다.',
-  weldOnly: '위치가 같은 점만 합친 상태. 여기서 줄어든 구멍은 처음부터 없던 것이다.',
-  naiveFan: '남은 구멍을 전부 가운데에서 부채꼴로 메운다. 구멍 종류와 면 방향은 빼 둔다.',
-  meshcap: '구멍 종류에 따라 나눠 메우고 면 방향까지 맞춘 결과.',
+  raw: '올린 파일 그대로. 좌표가 완전히 같은 점만 합치고 면은 하나도 빼지 않는다. 보정 전 점수의 기준이다.',
+  naiveFan: '점을 합친 뒤 남은 구멍을 전부 가운데에서 부채꼴로 메운다. 구멍 종류와 면 방향은 빼 둔다.',
+  patch: '원래 삼각형을 지키고, 구멍 종류에 따라 나눠 메우고 면 방향까지 맞춘 결과.',
+  solid: '와인딩 넘버로 안팎을 다시 정해 닫힌 표면을 새로 뽑은 결과. 두께 없는 면에는 최소 두께를 준다.',
+  meshcap: '입력을 보고 둘 중 하나를 고른 결과. 화면에서 기본으로 쓰는 값이다.',
 };
 
 export type ModelSource = 'meshy' | 'tripo' | 'synthetic';
@@ -35,11 +37,17 @@ export interface VariantMetrics {
   inconsistentEdges: number;
   components: number;
   degenerateTriangles: number;
+  /** 서로 뚫고 지나가는 면 쌍. 1만 쌍에서 세기를 멈춘다. */
+  selfIntersections: number;
   watertight: boolean;
   volume: number;
   score: number;
   grade: string;
   elapsedMs: number;
+  /** 원래 바깥 표면이 가장 긴 축의 0.5% 안에 남은 비율. 보정하지 않은 상태는 1이다. */
+  shapeKept: number;
+  /** 실제로 쓴 방식. 자동에서만 의미가 있다. */
+  engine?: 'patch' | 'solid';
 }
 
 export interface ModelBenchmark {

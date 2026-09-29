@@ -23,16 +23,21 @@ async function check(label: string, mesh: MeshData, upAxis: 'y' | 'z') {
 
   const payload = encodeRepairRequest(mesh, options);
   const remoteStart = Date.now();
-  const response = await fetch(`${BASE}/api/repair`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/octet-stream' },
-    body: payload,
-  });
+  // 로컬 계산이 서버의 keep-alive 시간(5초)보다 길면 재사용한 연결이 끊겨 있을 수 있다. 한 번 더 보낸다.
+  const send = () =>
+    fetch(`${BASE}/api/repair`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: payload,
+    });
+  const response = await send().catch(send);
   if (!response.ok) throw new Error(`서버 ${response.status}: ${await response.text()}`);
   const remote = decodeRepairResponse(await response.arrayBuffer());
   const remoteMs = Date.now() - remoteStart;
 
   const same =
+    local.engine === remote.engine &&
+    local.inputScore.total === remote.inputScore.total &&
     local.repairedScore.total === remote.repairedScore.total &&
     local.repaired.watertight === remote.repaired.watertight &&
     local.repaired.triangleCount === remote.repaired.triangleCount &&
@@ -40,21 +45,19 @@ async function check(label: string, mesh: MeshData, upAxis: 'y' | 'z') {
     local.mesh.positions.length === remote.mesh.positions.length &&
     local.mesh.indices.length === remote.mesh.indices.length;
 
-  // 좌표까지 바이트 단위로 같은지 표본으로 확인한다.
+  // 좌표와 인덱스가 바이트 단위로 모두 같은지 본다.
   let identical = same;
   if (identical) {
-    const step = Math.max(1, Math.floor(local.mesh.positions.length / 5000));
-    for (let i = 0; i < local.mesh.positions.length; i += step) {
-      if (local.mesh.positions[i] !== remote.mesh.positions[i]) {
-        identical = false;
-        break;
-      }
-    }
+    const a = new Uint8Array(local.mesh.positions.buffer, local.mesh.positions.byteOffset, local.mesh.positions.byteLength);
+    const b = new Uint8Array(remote.mesh.positions.buffer, remote.mesh.positions.byteOffset, remote.mesh.positions.byteLength);
+    const c = new Uint8Array(local.mesh.indices.buffer, local.mesh.indices.byteOffset, local.mesh.indices.byteLength);
+    const d = new Uint8Array(remote.mesh.indices.buffer, remote.mesh.indices.byteOffset, remote.mesh.indices.byteLength);
+    identical = Buffer.compare(a, b) === 0 && Buffer.compare(c, d) === 0;
   }
 
   console.log(
     `${identical ? '일치' : '불일치'}  ${label.padEnd(22)} ` +
-      `점수 ${remote.weldedScore.total}→${remote.repairedScore.total} · ` +
+      `${remote.engine} · 점수 ${remote.inputScore.total}→${remote.repairedScore.total} · ` +
       `구멍 ${remote.holes.length} · 밀폐 ${remote.repaired.watertight ? 'O' : 'X'} · ` +
       `로컬 ${localMs}ms / 서버왕복 ${remoteMs}ms · 전송 ${(payload.byteLength / 1024 / 1024).toFixed(1)}MB`,
   );

@@ -57,13 +57,16 @@ export function wrapLoops(
   edgeFaceCount?: (a: number, b: number) => number,
   wouldCreateNonManifold?: (a: number, b: number, c: number) => boolean,
   commitTriangle?: (a: number, b: number, c: number) => void,
+  budgetMs = Number.POSITIVE_INFINITY,
 ): CapPatch {
   const extra: number[] = [];
   const triangles: number[] = [];
   let base = baseVertexCount;
+  const t0 = Date.now();
 
   for (const loop of loops) {
     if (loop.vertices.length < 3) continue;
+    if (Date.now() - t0 >= budgetMs) break;
     const patch = wrapOne(mesh, loop, resolution, base, edgeFaceCount, wouldCreateNonManifold);
     const localBase = base;
     for (let i = 0; i < patch.newPositions.length; i++) extra.push(patch.newPositions[i]);
@@ -99,6 +102,7 @@ export function wrapBoundaryClusters(
   mesh: MeshData,
   resolution: number,
   strictManifold = false,
+  budgetMs = Number.POSITIVE_INFINITY,
 ): { mesh: MeshData; addedTriangles: number } {
   const topology = buildTopology(mesh);
   if (topology.fillFrom.length < 1) return { mesh, addedTriangles: 0 };
@@ -141,8 +145,10 @@ export function wrapBoundaryClusters(
   let addedTriangles = 0;
   let base = working.positions.length / 3;
   let runningBoundary = topology.boundaryEdgeCount;
+  const t0 = Date.now();
 
   for (const cluster of clusters) {
+    if (Date.now() - t0 >= budgetMs) break;
     const verts = uniqueOrdered(cluster.verts, cluster.edges);
     if (verts.length < 2) continue;
     const pts = verts.map((v) => vertexAt(working.positions, v));
@@ -217,6 +223,7 @@ export function wrapLeftoverEdgeAabbs(
   mesh: MeshData,
   resolution = LEFTOVER_WRAP_RES,
   strictManifold = false,
+  budgetMs = Number.POSITIVE_INFINITY,
 ): { mesh: MeshData; addedTriangles: number } {
   const topology = buildTopology(mesh);
   if (topology.fillFrom.length === 0) return { mesh, addedTriangles: 0 };
@@ -248,8 +255,10 @@ export function wrapLeftoverEdgeAabbs(
   const limit = Math.min(candidates.length, LEFTOVER_WRAP_LIMIT);
   let runningBoundary = topology.boundaryEdgeCount;
   let runningNm = topology.nonManifoldEdgeCount;
+  const t0 = Date.now();
 
   for (let i = 0; i < limit; i++) {
+    if (Date.now() - t0 >= budgetMs) break;
     const cand = candidates[i];
     const ia = working.indices[cand.face * 3];
     const ib = working.indices[cand.face * 3 + 1];

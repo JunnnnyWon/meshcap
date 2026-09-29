@@ -94,14 +94,14 @@ export function decodeRepairRequest(buffer: ArrayBuffer): { mesh: MeshData; opti
 }
 
 /** 응답에서 수치 배열을 떼어내고 남는 부분. */
-type ReportOnly = Omit<PipelineResult, 'mesh' | 'weldedMesh'>;
+type ReportOnly = Omit<PipelineResult, 'mesh' | 'inputMesh' | 'beforeDefectEdges' | 'afterDefectEdges'>;
 
 export function encodeRepairResponse(result: PipelineResult): ArrayBuffer {
-  const { mesh, weldedMesh, ...report } = result;
+  const { mesh, inputMesh, beforeDefectEdges, afterDefectEdges, ...report } = result;
   return encode(
     { report },
-    [mesh.positions, mesh.indices, weldedMesh.positions, weldedMesh.indices],
-    ['repairedPositions', 'repairedIndices', 'weldedPositions', 'weldedIndices'],
+    [mesh.positions, mesh.indices, inputMesh.positions, inputMesh.indices, beforeDefectEdges, afterDefectEdges],
+    ['repairedPositions', 'repairedIndices', 'inputPositions', 'inputIndices', 'beforeDefectEdges', 'afterDefectEdges'],
   );
 }
 
@@ -115,9 +115,11 @@ export function decodeRepairResponse(buffer: ArrayBuffer): PipelineResult {
       positions: arrays.repairedPositions as Float32Array,
       indices: arrays.repairedIndices as Uint32Array,
     },
-    weldedMesh: {
-      positions: arrays.weldedPositions as Float32Array,
-      indices: arrays.weldedIndices as Uint32Array,
+    inputMesh: {
+      positions: arrays.inputPositions as Float32Array,
+      indices: arrays.inputIndices as Uint32Array,
     },
+    beforeDefectEdges: arrays.beforeDefectEdges as Uint32Array,
+    afterDefectEdges: arrays.afterDefectEdges as Uint32Array,
   };
 }
