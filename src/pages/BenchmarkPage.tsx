@@ -39,16 +39,16 @@ export function BenchmarkPage() {
         <header className="mb-10 max-w-[760px]">
           <div className="label-caps mb-3">정량 비교</div>
           <h1 className="text-[30px] leading-tight font-semibold tracking-[-0.02em] text-ink-100">
-            같은 모델을 네 단계로 잘라, 점수가 어디서 오르는지 봅니다
+            같은 모델을 다섯 가지로 재서, 점수가 어디서 오르는지 봅니다
           </h1>
           <p className="mt-4 text-[14px] leading-relaxed text-ink-300">
-            다른 도구 결과만 놓고 비교하면 왜 올랐는지 안 보입니다. 그래서 우리 파이프라인을 한
-            단계씩 떼어 재 봤습니다. 용접만으로 사라지는 결함도 있고, 아무렇게나 메워도 되는 구멍도
-            있습니다. 구멍 종류를 나누고 면 방향을 맞춰야 넘어가는 것도 있습니다.
+            보정 전은 올린 파일 그대로입니다. 모든 변형을 같은 채점기로 재고, 관통은 메시 전체를
+            봅니다. 아무렇게나 메워도 되는 구멍도 있고, 구멍 종류를 나누고 면 방향을 맞춰야 넘어가는
+            것도 있고, 겹친 면 때문에 부피를 다시 정해야 넘어가는 것도 있습니다.
           </p>
         </header>
 
-        <section className="mb-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <section className="mb-10 grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {VARIANT_IDS.map((variant, index) => (
             <div key={variant} className="rounded-lg border border-ink-800 bg-ink-900/40 p-4">
               <div className="flex items-baseline gap-2 mb-2">
@@ -95,7 +95,10 @@ export function BenchmarkPage() {
                           <span className="font-mono text-[10.5px] text-ink-600">{model.concept}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] text-good">+{gain}점</span>
+                          <span className={`font-mono text-[11px] ${gain >= 0 ? 'text-good' : 'text-flaw'}`}>
+                            {gain >= 0 ? '+' : ''}
+                            {gain}점
+                          </span>
                           <button
                             type="button"
                             onClick={() => setExpanded(open ? null : model.id)}
@@ -136,6 +139,8 @@ function ModelDetail({ model }: { model: ModelBenchmark }) {
     { label: '겹친 모서리', key: 'nonManifoldEdges' },
     { label: '방향이 엇갈린 모서리', key: 'inconsistentEdges' },
     { label: '떨어진 덩어리', key: 'components' },
+    { label: '관통 쌍', key: 'selfIntersections' },
+    { label: '원래 모양 유지', key: 'shapeKept' },
     { label: '처리 시간', key: 'elapsedMs', unit: 'ms' },
   ];
 
@@ -173,7 +178,11 @@ function ModelDetail({ model }: { model: ModelBenchmark }) {
                         variant === 'meshcap' ? 'text-ink-100' : 'text-ink-400'
                       }`}
                     >
-                      {typeof value === 'number' ? value.toLocaleString('ko-KR') : String(value)}
+                      {row.key === 'shapeKept' && typeof value === 'number'
+                        ? `${(value * 100).toFixed(1)}%`
+                        : typeof value === 'number'
+                          ? value.toLocaleString('ko-KR')
+                          : String(value)}
                       {row.unit && <span className="text-ink-600 ml-0.5 text-[10px]">{row.unit}</span>}
                     </td>
                   );

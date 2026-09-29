@@ -35,7 +35,7 @@ for (const path of process.argv.slice(2)) {
       typeof runPipeline
     >;
     console.log(
-      `  점수 ${result.weldedScore.total} → ${result.repairedScore.total} · 밀폐 ${result.repaired.watertight} · 반복 ${result.capPasses}회`,
+      `  ${result.engine} · 점수 ${result.inputScore.total} → ${result.repairedScore.total} · 밀폐 ${result.repaired.watertight}`,
     );
     console.log(`  최대 RSS ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     continue;
@@ -56,15 +56,12 @@ for (const path of process.argv.slice(2)) {
     const result = step('전체 파이프라인', () => runPipeline(mesh, { upAxis: 'z' })) as ReturnType<
       typeof runPipeline
     >;
-    const t = result.timings;
+    console.log(`    ${result.timings.phases.map((p) => `${p.label} ${p.ms.toFixed(0)}`).join(' · ')} ms`);
     console.log(
-      `    용접 ${t.weld.toFixed(0)} · 분석 ${t.analyze.toFixed(0)} · 메우기 ${t.cap.toFixed(0)} · 정렬 ${t.orient.toFixed(0)} · 검증 ${t.validate.toFixed(0)} ms`,
-    );
-    console.log(
-      `  점수 ${result.weldedScore.total} → ${result.repairedScore.total} · 구멍 ${result.holes.length}개 · 밀폐 ${result.repaired.watertight}`,
+      `  ${result.engine} · 점수 ${result.inputScore.total} → ${result.repairedScore.total} · 구멍 ${result.holes.length}개 · 밀폐 ${result.repaired.watertight}`,
     );
     for (const [label, r] of [
-      ['용접 후', result.welded],
+      ['올린 그대로', result.input],
       ['보정 후', result.repaired],
     ] as const) {
       console.log(

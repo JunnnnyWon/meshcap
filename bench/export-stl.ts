@@ -27,16 +27,17 @@ for (const entry of SYNTHETIC_BENCH_MODELS) {
   const beforePath = resolve(outDir, `${entry.id}_before.stl`);
   const afterPath = resolve(outDir, `${entry.id}_after.stl`);
 
-  writeFileSync(beforePath, Buffer.from(toBinarySTL(result.weldedMesh, `${entry.id} before`)));
+  writeFileSync(beforePath, Buffer.from(toBinarySTL(result.inputMesh, `${entry.id} before`)));
   writeFileSync(afterPath, Buffer.from(toBinarySTL(result.mesh, `${entry.id} after`)));
 
   rows.push({
     모델: entry.label,
-    '보정 전 점수': result.weldedScore.total,
+    방식: result.engine,
+    '올린 그대로 점수': result.inputScore.total,
     '보정 후 점수': result.repairedScore.total,
-    '보정 전 구멍': result.welded.boundaryLoopCount,
+    '올린 그대로 구멍': result.input.boundaryLoopCount,
     '보정 후 구멍': result.repaired.boundaryLoopCount,
-    '추가 삼각형': result.repaired.triangleCount - result.welded.triangleCount,
+    '삼각형 증감': result.repaired.triangleCount - result.input.triangleCount,
   });
 }
 

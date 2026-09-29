@@ -199,3 +199,116 @@ export function weldVertices(mesh: MeshData, options: WeldOptions = {}): WeldRes
     remap,
   };
 }
+
+export interface ExactWeldResult {
+  mesh: MeshData;
+  /** 좌표가 완전히 같아 하나로 합친 정점 수. */
+  mergedVertices: number;
+  /** 합친 뒤 두 꼭짓점 이상이 같아져 위상에서 뺀 삼각형 수. 점수에서는 찌그러진 면으로 센다. */
+  removedDegenerateTriangles: number;
+  /** NaN/Infinity 좌표를 참조해 뺀 삼각형 수. 점수에서는 찌그러진 면으로 센다. */
+  removedInvalidTriangles: number;
+  /** 원래 삼각형 수. */
+  inputTriangles: number;
+}
+
+const bitsView = new DataView(new ArrayBuffer(4));
+function floatBits(value: number): number {
+  // -0과 +0은 같은 점이다.
+  bitsView.setFloat32(0, value === 0 ? 0 : value);
+  return bitsView.getUint32(0) | 0;
+}
+
+/**
+ * 좌표가 비트 단위로 같은 정점만 합치고 삼각형은 하나도 빼지 않는다.
+ *
+ * 보정 전 점수를 재는 기준이다. 슬라이서가 STL을 읽을 때 하는 일도 이 정도라,
+ * 업로드한 파일을 그대로 잰 값에 가장 가깝다. 허용오차 용접이나 중복 면 제거는
+ * 보정의 일부이므로 여기서 하지 않는다. 같은 면이 반대 방향으로 두 번 있는
+ * 양면 시트를 지우면 그 가장자리가 새 구멍이 되기 때문이다.
+ */
+export function weldExact(mesh: MeshData): ExactWeldResult {
+  const { positions, indices } = mesh;
+  const srcVertexCount = positions.length / 3;
+  const remap = new Int32Array(srcVertexCount).fill(-1);
+  const outPositions = new Float32Array(srcVertexCount * 3);
+  const keyX = new Int32Array(srcVertexCount);
+  const keyY = new Int32Array(srcVertexCount);
+  const keyZ = new Int32Array(srcVertexCount);
+  const table = new IntHashTable(srcVertexCount);
+  let outCount = 0;
+  let merged = 0;
+
+  const referenced = new Uint8Array(srcVertexCount);
+  for (let i = 0; i < indices.length; i++) {
+    const v = indices[i];
+    if (v < srcVertexCount) referenced[v] = 1;
+  }
+
+  for (let v = 0; v < srcVertexCount; v++) {
+    if (!referenced[v]) continue;
+    const o = v * 3;
+    const x = positions[o];
+    const y = positions[o + 1];
+    const z = positions[o + 2];
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+    const bx = floatBits(x);
+    const by = floatBits(y);
+    const bz = floatBits(z);
+    const hash = hash3(bx, by, bz);
+    let found = -1;
+    for (let cand = table.first(hash); cand >= 0; cand = table.after(cand)) {
+      if (keyX[cand] === bx && keyY[cand] === by && keyZ[cand] === bz) {
+        found = cand;
+        break;
+      }
+    }
+    if (found >= 0) {
+      remap[v] = found;
+      merged++;
+      continue;
+    }
+    const id = outCount++;
+    outPositions[id * 3] = x;
+    outPositions[id * 3 + 1] = y;
+    outPositions[id * 3 + 2] = z;
+    keyX[id] = bx;
+    keyY[id] = by;
+    keyZ[id] = bz;
+    table.insert(hash, id);
+    remap[v] = id;
+  }
+
+  const outIndices = new Uint32Array(indices.length);
+  let outTriangles = 0;
+  let removedDegenerateTriangles = 0;
+  let removedInvalidTriangles = 0;
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = remap[indices[t]] ?? -1;
+    const b = remap[indices[t + 1]] ?? -1;
+    const c = remap[indices[t + 2]] ?? -1;
+    if (a < 0 || b < 0 || c < 0) {
+      removedInvalidTriangles++;
+      continue;
+    }
+    if (a === b || b === c || a === c) {
+      removedDegenerateTriangles++;
+      continue;
+    }
+    const o = outTriangles++ * 3;
+    outIndices[o] = a;
+    outIndices[o + 1] = b;
+    outIndices[o + 2] = c;
+  }
+
+  return {
+    mesh: {
+      positions: outPositions.slice(0, outCount * 3),
+      indices: outIndices.slice(0, outTriangles * 3),
+    },
+    mergedVertices: merged,
+    removedDegenerateTriangles,
+    removedInvalidTriangles,
+    inputTriangles: indices.length / 3,
+  };
+}

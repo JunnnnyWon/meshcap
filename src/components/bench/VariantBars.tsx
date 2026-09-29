@@ -2,8 +2,9 @@ import { VARIANT_IDS, VARIANT_LABEL, type ModelBenchmark } from '../../bench/sch
 
 const BAR_TONE: Record<string, string> = {
   raw: 'bg-flaw/70',
-  weldOnly: 'bg-amber-accent/60',
-  naiveFan: 'bg-amber-accent',
+  naiveFan: 'bg-amber-accent/60',
+  patch: 'bg-amber-accent',
+  solid: 'bg-patch',
   meshcap: 'bg-good',
 };
 

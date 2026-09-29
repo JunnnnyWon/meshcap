@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPipeline } from '../pipeline.ts';
+import { runPipeline, type PipelineOptions } from '../pipeline.ts';
+import type { MeshData } from '../types.ts';
 import { capLiepa } from '../cap/liepa.ts';
 import { refineAndFair } from '../cap/refine.ts';
 import { buildTopology } from '../halfEdge.ts';
@@ -89,45 +90,49 @@ describe('classifyLoops', () => {
   });
 });
 
+/** 구멍 메우기의 세부 동작을 본다. 자동 선택이 솔리드화로 바꾸지 않게 고정한다. */
+function runPatch(mesh: MeshData, options: PipelineOptions = {}) {
+  return runPipeline(mesh, { engine: 'patch', ...options });
+}
+
 describe('runPipeline', () => {
   it('열린 정육면체를 밀폐 상태로 만든다', () => {
-    const result = runPipeline(openCube());
+    const result = runPatch(openCube());
 
-    expect(result.welded.watertight).toBe(false);
+    expect(result.input.watertight).toBe(false);
     expect(result.repaired.watertight).toBe(true);
     expect(result.repaired.eulerCharacteristic).toBe(2);
     expect(result.repairedScore.total).toBe(100);
   });
 
   it('메운 뒤 부피가 원래 정육면체와 같다', () => {
-    const result = runPipeline(openCube());
+    const result = runPatch(openCube());
     expect(result.repaired.volume).toBeCloseTo(1, 5);
   });
 
   it('닫힌 메시는 건드리지 않는다', () => {
-    const result = runPipeline(cube());
+    const result = runPatch(cube());
 
     expect(result.holes).toHaveLength(0);
     expect(triangleCount(result.mesh)).toBe(12);
     expect(result.repairedScore.total).toBe(100);
   });
 
-  it('분해된 정점을 용접해 구멍 오탐을 걷어낸다', () => {
-    const result = runPipeline(explode(cube()));
+  it('분해된 정점은 올린 그대로 잴 때부터 합쳐 구멍으로 치지 않는다', () => {
+    const result = runPatch(explode(cube()));
 
-    // 용접 전에는 모든 에지가 경계로 보인다.
-    expect(result.raw.boundaryEdgeCount).toBe(36);
-    expect(result.raw.boundaryLoopCount).toBeGreaterThan(0);
+    // 좌표가 완전히 같은 점은 올린 그대로에서도 합친다. 슬라이서가 STL을 읽는 방식이다.
+    expect(result.input.boundaryEdgeCount).toBe(0);
+    expect(result.inputSummary.mergedVertices).toBe(28);
+    expect(result.inputScore.total).toBe(100);
 
-    // 용접만으로 결함이 사라지므로 메울 구멍이 없다.
-    expect(result.welded.boundaryEdgeCount).toBe(0);
     expect(result.holes).toHaveLength(0);
     expect(result.repaired.watertight).toBe(true);
-    expect(result.weldSummary.mergedVertices).toBe(28);
+    expect(result.patch!.weldSummary.mergedVertices).toBe(28);
   });
 
   it('원기둥의 위아래 구멍을 서로 다른 전략으로 메운다', () => {
-    const result = runPipeline(openCylinder(24));
+    const result = runPatch(openCylinder(24));
 
     expect(result.holes).toHaveLength(2);
     const applied = result.holes.map((h) => h.appliedStrategy).sort();
@@ -136,7 +141,7 @@ describe('runPipeline', () => {
   });
 
   it('바닥 받침은 옆벽과 접지면을 함께 만든다', () => {
-    const result = runPipeline(openCylinder(24));
+    const result = runPatch(openCylinder(24));
     const base = result.holes.find((h) => h.appliedStrategy === 'flatBase');
 
     // 옆벽 2n개에 접지면 n-2개, 새 정점은 n개다.
@@ -145,7 +150,7 @@ describe('runPipeline', () => {
   });
 
   it('평면 삼각화는 새 정점 없이 n-2개 삼각형을 만든다', () => {
-    const result = runPipeline(openCylinder(24));
+    const result = runPatch(openCylinder(24));
     const planar = result.holes.find((h) => h.appliedStrategy === 'planar');
 
     expect(planar?.addedVertices).toBe(0);
@@ -153,7 +158,7 @@ describe('runPipeline', () => {
   });
 
   it('Liepa 삼각화는 Steiner 정점을 넣을 수 있고 그래도 밀폐된다', () => {
-    const result = runPipeline(openCylinder(8, 1, 2, 0.5), { disableFlatBase: true });
+    const result = runPatch(openCylinder(8, 1, 2, 0.5), { disableFlatBase: true });
     const liepa = result.holes.find((h) => h.appliedStrategy === 'liepa');
 
     expect(liepa?.addedTriangles).toBeGreaterThanOrEqual(6);
@@ -184,18 +189,19 @@ describe('runPipeline', () => {
   });
 
   it('물결치는 구멍도 밀폐되고 관통이 생기지 않는다', () => {
-    const result = runPipeline(openCylinder(32, 1, 2, 0.4));
+    const result = runPatch(openCylinder(32, 1, 2, 0.4));
 
     expect(result.repaired.watertight).toBe(true);
-    expect(result.repaired.capSelfIntersections).toBe(0);
+    expect(result.repaired.selfIntersectionChecked).toBe(true);
+    expect(result.repaired.selfIntersections).toBe(0);
   });
 
   it('뒤집힌 면의 방향을 되돌린다', () => {
-    const result = runPipeline(flippedTetrahedron());
+    const result = runPatch(flippedTetrahedron());
 
-    expect(result.welded.inconsistentEdgeCount).toBeGreaterThan(0);
+    expect(result.input.inconsistentEdgeCount).toBeGreaterThan(0);
     expect(result.repaired.inconsistentEdgeCount).toBe(0);
-    expect(result.orientSummary.flippedTriangles).toBeGreaterThan(0);
+    expect(result.patch!.orientSummary.flippedTriangles).toBeGreaterThan(0);
   });
 
   it('안쪽을 향하던 법선을 바깥으로 돌린다', () => {
@@ -207,13 +213,13 @@ describe('runPipeline', () => {
       flipped[t + 2] = inward.indices[t + 1];
     }
 
-    const result = runPipeline({ positions: inward.positions, indices: flipped });
-    expect(result.orientSummary.invertedShells).toBe(1);
+    const result = runPatch({ positions: inward.positions, indices: flipped });
+    expect(result.patch!.orientSummary.invertedShells).toBe(1);
     expect(result.repaired.volume).toBeGreaterThan(0);
   });
 
   it('진단 전용 모드에서는 메시를 바꾸지 않는다', () => {
-    const result = runPipeline(openCube(), { diagnoseOnly: true });
+    const result = runPatch(openCube(), { diagnoseOnly: true });
 
     expect(result.holes).toHaveLength(1);
     expect(result.holes[0].addedTriangles).toBe(0);
@@ -222,16 +228,20 @@ describe('runPipeline', () => {
   });
 
   it('보정 후 점수가 보정 전보다 높아진다', () => {
-    const result = runPipeline(openCylinder(24));
-    expect(result.repairedScore.total).toBeGreaterThan(result.weldedScore.total);
-    expect(result.weldedScore.grade).not.toBe('A');
+    const result = runPatch(openCylinder(24));
+    expect(result.repairedScore.total).toBeGreaterThan(result.inputScore.total);
+    expect(result.inputScore.grade).not.toBe('A');
     expect(result.repairedScore.grade).toBe('A');
   });
 
   it('처리 시간을 단계별로 기록한다', () => {
-    const result = runPipeline(openCylinder(24));
+    const result = runPatch(openCylinder(24));
     expect(result.timings.total).toBeGreaterThanOrEqual(0);
-    expect(result.timings.cap).toBeGreaterThanOrEqual(0);
+    const ids = result.timings.phases.map((phase) => phase.id);
+    expect(ids).toContain('diagnose');
+    expect(ids).toContain('patch-cap');
+    expect(ids).toContain('validate');
+    expect(result.timings.phases.every((phase) => phase.ms >= 0)).toBe(true);
   });
 });
 

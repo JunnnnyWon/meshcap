@@ -10,7 +10,7 @@ const wavy = proceduralSample('wavy');
 
 describe('합성 샘플 회귀', () => {
   it('결함 회전체를 완전히 밀폐한다', () => {
-    const result = runPipeline(bust.build(), { upAxis: bust.upAxis });
+    const result = runPipeline(bust.build(), { upAxis: bust.upAxis, engine: 'patch' });
 
     expect(result.repaired.watertight).toBe(true);
     expect(result.holes.every((hole) => hole.closed)).toBe(true);
@@ -19,7 +19,7 @@ describe('합성 샘플 회귀', () => {
   });
 
   it('물결 개구부 튜브를 완전히 밀폐한다', () => {
-    const result = runPipeline(wavy.build(), { upAxis: wavy.upAxis });
+    const result = runPipeline(wavy.build(), { upAxis: wavy.upAxis, engine: 'patch' });
 
     expect(result.repaired.watertight).toBe(true);
     expect(result.holes).toHaveLength(2);
@@ -28,7 +28,7 @@ describe('합성 샘플 회귀', () => {
   });
 
   it('비평면 합성 구멍에는 Steiner 정점이 들어간다', () => {
-    const result = runPipeline(openCylinder(16, 2, 2, 0.8), { disableFlatBase: true });
+    const result = runPipeline(openCylinder(16, 2, 2, 0.8), { disableFlatBase: true, engine: 'patch' });
     expect(result.holes.some((hole) => hole.planarity >= 0.06)).toBe(true);
     expect(result.repaired.watertight).toBe(true);
   });
@@ -44,8 +44,8 @@ describe('법선 정렬 순서에 대한 절제 실험', () => {
    * 없는 삼각형이 대량으로 덧붙지는 않지만, 탐지 목록과 점수는 크게 나빠진다.
    */
   it('정렬을 건너뛰면 뒤집힌 면 때문에 보정 점수가 떨어진다', () => {
-    const withOrient = runPipeline(bust.build(), { upAxis: bust.upAxis });
-    const without = runPipeline(bust.build(), { upAxis: bust.upAxis, skipOrient: true });
+    const withOrient = runPipeline(bust.build(), { upAxis: bust.upAxis, engine: 'patch' });
+    const without = runPipeline(bust.build(), { upAxis: bust.upAxis, skipOrient: true, engine: 'patch' });
 
     // 메우기는 면이 하나인 테두리만 따라가므로 가짜 구멍이 목록에 안 쌓인다.
     // 방향이 엇갈린 모서리와 점수는 정렬을 빼면 분명히 나빠진다.

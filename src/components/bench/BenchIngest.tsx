@@ -165,7 +165,7 @@ export function BenchIngest({ existing }: { existing: ModelBenchmark[] }) {
               />
 
               <div className="ml-auto flex items-center gap-2 font-mono text-[11px]">
-                <Badge tone="flaw">무처리 {model.variants.raw.score}</Badge>
+                <Badge tone="flaw">올린 그대로 {model.variants.raw.score}</Badge>
                 <span className="text-ink-600">→</span>
                 <Badge tone="good">MeshCap {model.variants.meshcap.score}</Badge>
               </div>

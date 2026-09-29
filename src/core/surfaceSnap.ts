@@ -96,6 +96,12 @@ const T_TMIN = 0.08;
 const T_TMAX = 0.92;
 const MAX_T_ITERS = 12;
 const T_BATCH = 24;
+/** 삼각형·선분을 걸친 칸 모두에 넣는 상한. 이보다 크면 대표 칸 몇 개에만 넣는다. */
+const REGISTER_ALL_CELLS = 4096;
+/** 격자 등록 총량 상한. 큰 면이 많은 입력에서 메모리가 폭증하지 않게 넘으면 대표 칸만 쓴다. */
+function registrationBudget(items: number): number {
+  return Math.max(4_000_000, items * 32);
+}
 
 /**
  * 짝을 못 찾는 1-face 에지를 기존 안쪽 표면에 붙인다.
@@ -460,7 +466,8 @@ export function dropOverlappingFlaps(mesh: MeshData): { mesh: MeshData; count: n
 
   const cell = Math.max(cap, incidence.meanLength * 0.5, 1e-12);
   const hashed = hashInteriorCells(interiors, cell);
-  const reach = Math.max(2, Math.ceil((incidence.meanLength * 8) / cell));
+  // 결과는 cap 안의 가장 가까운 면만 쓴다. 예전처럼 평균 에지 8배(33³칸)를 뒤질 이유가 없다.
+  const reach = Math.max(2, Math.ceil(cap / cell) + 1);
 
   const candidateFaces = uniqueFillFaces(topology.fillFace);
   const neighbors = flapAdjacency(mesh, candidateFaces, incidence);
@@ -606,7 +613,10 @@ function snapOneTJunction(mesh: MeshData): MeshData | null {
 
   const cell = Math.max(cap, incidence.meanLength * 0.5, 1e-12);
   const hashed = hashInteriorEdges(segs, cell);
-  const reach = Math.max(2, Math.ceil((incidence.meanLength * 8) / cell));
+  const fullReach = Math.max(2, Math.ceil((incidence.meanLength * 8) / cell));
+  // 점 질의는 cap 안만 본다. 에지 질의는 중점에서 양 끝이 cap 안인 선분을 찾으므로
+  // 에지 길이의 절반만큼 더 본다.
+  const reach = Math.min(fullReach, Math.max(2, Math.ceil(cap / cell) + 1));
   const partners = fillPartners(topology.fillFrom, topology.fillTo);
   const before = topology.boundaryEdgeCount;
 
@@ -640,9 +650,10 @@ function snapOneTJunction(mesh: MeshData): MeshData | null {
     const iz = Math.floor(mid[2] / cell);
     let best: EdgeHit | null = null;
     const seen = new Set<number>();
-    for (let dx = -reach; dx <= reach; dx++) {
-      for (let dy = -reach; dy <= reach; dy++) {
-        for (let dz = -reach; dz <= reach; dz++) {
+    const edgeReach = Math.min(fullReach, Math.max(2, Math.ceil((cap + length(ab) / 2) / cell) + 1));
+    for (let dx = -edgeReach; dx <= edgeReach; dx++) {
+      for (let dy = -edgeReach; dy <= edgeReach; dy++) {
+        for (let dz = -edgeReach; dz <= edgeReach; dz++) {
           for (let cand = hashed.table.first(hash3(ix + dx, iy + dy, iz + dz)); cand >= 0; cand = hashed.table.after(cand)) {
             const seg = segs[hashed.segOf[cand]];
             if (seen.has(seg.id) || seg.u === a || seg.v === a || seg.u === b || seg.v === b) continue;
@@ -1010,6 +1021,7 @@ function hashInteriorEdges(
 ): { table: IntHashTable; segOf: Int32Array } {
   const ids: number[] = [];
   const keys: number[] = [];
+  const budget = registrationBudget(segs.length);
   const push = (ix: number, iy: number, iz: number, i: number) => {
     keys.push(hash3(ix, iy, iz));
     ids.push(i);
@@ -1024,7 +1036,7 @@ function hashInteriorEdges(
     const y1 = Math.floor(Math.max(a[1], b[1]) / cell);
     const z1 = Math.floor(Math.max(a[2], b[2]) / cell);
     const span = (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
-    if (span <= 32) {
+    if (span <= REGISTER_ALL_CELLS && keys.length + span <= budget) {
       for (let ix = x0; ix <= x1; ix++) {
         for (let iy = y0; iy <= y1; iy++) {
           for (let iz = z0; iz <= z1; iz++) push(ix, iy, iz, i);
@@ -1475,6 +1487,7 @@ function hashInteriorCells(
 ): { table: IntHashTable; triOf: Int32Array } {
   const ids: number[] = [];
   const keys: number[] = [];
+  const budget = registrationBudget(interiors.length);
   const push = (ix: number, iy: number, iz: number, tri: number) => {
     keys.push(hash3(ix, iy, iz));
     ids.push(tri);
@@ -1495,7 +1508,8 @@ function hashInteriorCells(
     const y1 = Math.floor(maxy / cell);
     const z1 = Math.floor(maxz / cell);
     const span = (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
-    if (span <= 64) {
+    // 걸친 칸에 모두 넣어야 탐색 반경을 거리 한도에 맞춰 줄여도 후보를 놓치지 않는다.
+    if (span <= REGISTER_ALL_CELLS && keys.length + span <= budget) {
       for (let ix = x0; ix <= x1; ix++) {
         for (let iy = y0; iy <= y1; iy++) {
           for (let iz = z0; iz <= z1; iz++) push(ix, iy, iz, i);

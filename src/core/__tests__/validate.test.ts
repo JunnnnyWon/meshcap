@@ -28,20 +28,23 @@ function overlappingCluster(count: number): MeshData {
   return { positions, indices };
 }
 
-describe('뚜껑 관통 검사', () => {
-  it('뚜껑이 없으면 교차 횟수가 0이다', () => {
-    const report = validateMesh(openCube(), { capTriangleStart: 10 });
-    expect(report.capSelfIntersections).toBe(0);
+describe('관통 검사', () => {
+  it('관통이 없으면 0쌍이고 끝까지 검사했다고 표시한다', () => {
+    const report = validateMesh(openCube());
+    expect(report.selfIntersections).toBe(0);
     expect(report.selfIntersectionChecked).toBe(true);
   });
 
-  it('빽빽한 뚜껑에서 Set 한도를 넘기지 않는다', () => {
+  it('빽빽하게 겹친 면에서도 멈추지 않고 한도에서 세기를 멈춘다', () => {
     const mesh = overlappingCluster(8_000);
-    expect(() =>
-      validateMesh(mesh, {
-        capTriangleStart: 100,
-        pairTestLimit: 5_000,
-      }),
-    ).not.toThrow();
+    const report = validateMesh(mesh, { intersectionCap: 50 });
+    // 같은 평면에 겹친 면은 관통으로 치지 않는다.
+    expect(report.selfIntersections).toBeLessThanOrEqual(50);
+    expect(report.selfIntersectionChecked).toBe(true);
+  });
+
+  it('진단 전용으로는 관통 검사를 건너뛰고, 그 경우 검사했다고 표시하지 않는다', () => {
+    const report = validateMesh(openCube(), { intersections: 'none' });
+    expect(report.selfIntersectionChecked).toBe(false);
   });
 });

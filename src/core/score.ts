@@ -96,16 +96,15 @@ export function scorePrintability(report: ValidationReport): PrintabilityScore {
 
   items.push({
     id: 'intersection',
-    label: '메운 면이 뚫고 나가는지',
+    label: '면끼리 뚫고 지나가는지',
     max: 5,
-    earned: !report.selfIntersectionChecked
-      ? 5
-      : Math.max(0, 5 - report.capSelfIntersections),
+    // 검사하지 못했으면 깨끗하다고 보지 않는다. 보정 전후 모두 같은 규칙이다.
+    earned: !report.selfIntersectionChecked ? 0 : Math.max(0, 5 - report.selfIntersections),
     detail: !report.selfIntersectionChecked
-      ? '모델이 커서 겹침 검사를 건너뛰었습니다'
-      : report.capSelfIntersections === 0
-        ? '새로 메운 면이 기존 표면을 뚫지 않았습니다'
-        : `기존 표면과 겹치는 새 면 ${fmt(report.capSelfIntersections)}개`,
+      ? '끝까지 검사하지 못해 점수를 주지 않았습니다'
+      : report.selfIntersections === 0
+        ? '서로 뚫고 지나가는 면이 없습니다'
+        : `서로 뚫고 지나가는 면 ${fmt(report.selfIntersections)}쌍${report.selfIntersectionCapped ? ' 이상' : ''}`,
   });
 
   const total = items.reduce((sum, item) => sum + item.earned, 0);

@@ -8,6 +8,29 @@ const bust = data.models.find((m) => m.id === 'syn-bust');
 const splitOnly = data.models.find((m) => m.id === 'syn-split-only');
 const worst = data.models.find((m) => m.id === 'syn-worst');
 
+/** 대조군의 변형별 평균 점수. */
+const averageScore = (variant: 'raw' | 'meshcap'): number => {
+  if (data.models.length === 0) return 0;
+  const sum = data.models.reduce((acc, model) => acc + model.variants[variant].score, 0);
+  return Math.round((sum / data.models.length) * 10) / 10;
+};
+
+/**
+ * 3D AI 예제 측정값. 브라우저 전용 파일(Draco·텍스처)이라 벤치 스크립트가 아니라
+ * 같은 코어를 직접 돌려 잰 값을 적는다.
+ */
+const AI_EXAMPLE_ROWS: { label: string; a: string; b: string }[] = [
+  { label: '삼각형', a: '169,478', b: '177,035' },
+  { label: '올린 그대로 점수', a: '61', b: '67' },
+  { label: '겹친 모서리 (올린 그대로)', a: '52,007', b: '13,627' },
+  { label: '관통 쌍 (올린 그대로)', a: '1만 이상', b: '1,789' },
+  { label: '구멍 메우기', a: '56점 · 14초', b: '65점 · 11초' },
+  { label: '솔리드화 (자동)', a: '100점 · 3.6초', b: '100점 · 2.7초' },
+  { label: '솔리드화 한 스레드', a: '7.4초', b: '5.6초' },
+  { label: '원래 모양 유지', a: '90.4%', b: '99.2%' },
+  { label: '보정 후 삼각형', a: '768,232', b: '486,564' },
+];
+
 /** 분류기가 실제로 메운 구멍 수. 정렬 전 테두리 개수와 비교하기 위한 값이다. */
 const filledHoles = (id: string): number => {
   const model = data.models.find((m) => m.id === id);
@@ -22,9 +45,9 @@ export function MethodPage() {
         <header className="mb-10 pb-8 border-b border-ink-800">
           <div className="label-caps mb-3">청강문화산업대학교 · 2026 청강 AI 크리에이티브 부스트</div>
           <h1 className="text-[28px] leading-[1.3] font-semibold tracking-[-0.02em] text-ink-100">
-            MeshCap: 생성형 3D 메시 구멍을 찾아 메우고
+            MeshCap: 생성형 3D 메시를 출력할 수 있게 고치고
             <br />
-            출력해도 되는지 점수로 재는 방법
+            같은 잣대로 전후를 재는 방법
           </h1>
           <p className="mt-5 text-[13.5px] leading-relaxed text-ink-300">
             조원준<sup className="text-ink-500 text-[10px] ml-0.5">1</sup> · 박정훈
@@ -35,7 +58,7 @@ export function MethodPage() {
             <sup>1</sup>청강문화산업대학교 게임콘텐츠스쿨
           </p>
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-400">
-            키워드: 구멍 메우기, 생성형 3D, 비다양체, half-edge, 3D 프린팅, 브라우저 기하 처리
+            키워드: 구멍 메우기, 일반화 와인딩 넘버, 솔리드화, 생성형 3D, 비다양체, 3D 프린팅, 브라우저 기하 처리
           </p>
         </header>
 
@@ -51,17 +74,21 @@ export function MethodPage() {
             로컬이 못 닫은 테두리만 주위를 감싸 메웁니다.             면이 이미
             둘인 에지에는 뚜껑을 붙이지 않습니다. 뚜껑 뒤에 남는 1-면 찢김은 겹친 여분을 떼고,
             시트에 가까운 변은 새 정점만으로 얇은 띠를 붙입니다. 밀폐, 다양체, 법선, 관통은
-            100점으로 환산하되, 점수는 진단이고 이어져 보이는 자리가 우선입니다. 코어는 three.js에 의존하지 않는 TypeScript라 브라우저 워커와 연산
-            서버가 같은 숫자를 냅니다.
+            100점으로 환산합니다. 겹친 모서리와 면끼리의 관통이 많은 입력에는 두 번째 방법인
+            솔리드화를 씁니다. 일반화 와인딩 넘버로 안팎을 다시 정하고, 두께 없는 면에 최소 두께를
+            준 뒤, 사면체 분할 위에서 닫힌 표면을 새로 뽑습니다. 코어는 three.js에 의존하지 않는
+            TypeScript라 브라우저 워커와 연산 서버가 같은 숫자를 냅니다.
           </p>
           <p>
-            단계를 하나씩 뺀 실험에서, 용접만으로 닫히는 구는 45점에서 100점이 됩니다. 뒤집힌 면이
-            섞인 회전체는 아무 구멍이나 부채꼴로 메우면 {bust?.variants.naiveFan.score ?? 75}점에
-            머물고, MeshCap은 {bust?.variants.meshcap.score ?? 100}점에 도달합니다. 3D AI A 출력 309만
-            삼각형은 브라우저에서 약 7초 만에 경계 에지 120개가 0개가 되어 94점에서 96점으로
-            올랐습니다. 3D AI B 190만 삼각형은 97점에서 99점입니다. 표면을 닫는 일과 다양체로 만드는
-            일이 충돌할 수 있어, 채점에서 두 항목을 나눴습니다. 현재 파이프라인은 비다양체 에지를
-            먼저 분리하고, 면이 둘인 에지에는 뚜껑을 거부합니다.
+            보정 전 점수는 올린 파일 그대로 잽니다. 좌표가 비트 단위로 같은 점만 합치고 면은 하나도
+            빼지 않으며, 관통 검사도 보정 전후 모두 메시 전체에 합니다. 이 기준에서 합성 대조군
+            {' '}{data.models.length}개는 평균 {averageScore('raw')}점에서 {averageScore('meshcap')}점이
+            됩니다. 뒤집힌 면이 섞인 회전체는 아무 구멍이나 부채꼴로 메우면{' '}
+            {bust?.variants.naiveFan.score ?? 60}점에 머물고, 구멍 메우기는{' '}
+            {bust?.variants.patch.score ?? 100}점입니다. 결함을 겹친 구는 구멍 메우기로{' '}
+            {worst?.variants.patch.score ?? 78}점, 솔리드화로 {worst?.variants.solid.score ?? 100}점입니다.
+            3D AI 예제 두 개(17만 삼각형)는 겹친 모서리와 관통 때문에 구멍 메우기로는 오히려 점수가
+            내려가고, 솔리드화로는 둘 다 100점이 됩니다(4.2절).
           </p>
         </Section>
 
@@ -76,10 +103,10 @@ export function MethodPage() {
             MeshCap은 그 앞단을 브라우저에서 처리합니다. UV 이음매에서 생긴 거짓 경계를 용접으로
             없애고, 면 방향을 맞춘 뒤, 짝이 없는 half-edge로 구멍을 찾습니다. &ldquo;한 면만 접한
             에지&rdquo;로는 순회가 끊기는 지점을 이 정의로 피합니다. 구멍마다 메우는 방법을 다르게
-            고르고, 슬라이서가 실패하는 순서에 맞춰 100점으로 채점합니다. 같은 코드를 브라우저와
-            서버에서 돌려 3D AI 출력물 309만·190만 삼각형의 경계를 0으로 만들었습니다.
-            용접을 빼면 구멍이 없는 구도 경계 수천 개로 잡힙니다. 그 순서가 점수에 미치는 영향은
-            단계를 하나씩 뺀 실험으로 갈라 봤습니다.
+            고르고, 슬라이서가 실패하는 순서에 맞춰 100점으로 채점합니다. 겹친 면과 관통이 많은
+            입력은 솔리드화로 부피를 다시 정합니다. 같은 코드를 브라우저와 서버에서 돌리고, 보정
+            전후는 같은 잣대로 잽니다. 각 단계가 점수에 미치는 영향은 단계를 하나씩 뺀 실험으로
+            갈라 봤습니다.
           </p>
         </Section>
 
@@ -125,12 +152,12 @@ export function MethodPage() {
           </p>
           {splitOnly && (
             <Callout>
-              대조군 <strong>{splitOnly.label}</strong>은 실제로는 구멍이 하나도 없는 닫힌 모델입니다.
-              그런데 용접 전에는 경계 에지가{' '}
-              <Mono>{splitOnly.variants.raw.boundaryEdges.toLocaleString('ko-KR')}개</Mono>로 잡혀
-              점수가 <Mono>{splitOnly.variants.raw.score}점</Mono>에 머무릅니다. 좌표가 같은 정점을
-              합치기만 해도 <Mono>{splitOnly.variants.weldOnly.score}점</Mono>이 됩니다. 이 구간에서
-              메운 구멍은 하나도 없습니다.
+              대조군 <strong>{splitOnly.label}</strong>은 이음매마다 정점을 쪼개 둔 구입니다. 좌표가
+              비트 단위로 같은 점은 올린 그대로 잴 때부터 합치므로, 이음매는 구멍으로 잡히지 않습니다.
+              그래도 남쪽 극점에는 sin(π)가 정확히 0이 아니라서 1e-16만큼 벌어진 점들이 남아, 올린
+              그대로는 열린 모서리 <Mono>{splitOnly.variants.raw.boundaryEdges.toLocaleString('ko-KR')}개</Mono>
+              {' '}·<Mono>{splitOnly.variants.raw.score}점</Mono>입니다. 대각선의 1e-6배 안의 점까지
+              합치는 용접을 거치면 <Mono>{splitOnly.variants.patch.score}점</Mono>이 됩니다.
             </Callout>
           )}
           <p>
@@ -173,10 +200,10 @@ export function MethodPage() {
           {bust && (
             <Callout>
               대조군 <strong>{bust.label}</strong>에 뒤집힌 면을 섞어 두었습니다. 정렬하지 않으면
-              테두리가 <Mono>{bust.variants.weldOnly.holes}개</Mono>로 잡히지만, 방향을 맞추고 나면
+              테두리가 <Mono>{bust.variants.raw.holes}개</Mono>로 잡히지만, 방향을 맞추고 나면
               실제 구멍은 <Mono>{filledHoles('syn-bust')}개</Mono>뿐입니다. 나머지는 전부 뒤집힌 면이
               만든 허상입니다. 점수도 <Mono>{bust.variants.naiveFan.score}점</Mono>과{' '}
-              <Mono>{bust.variants.meshcap.score}점</Mono>으로 갈립니다.
+              <Mono>{bust.variants.patch.score}점</Mono>으로 갈립니다.
             </Callout>
           )}
           <p>
@@ -352,21 +379,70 @@ export function MethodPage() {
             <ScoreRow label="법선 방향" points={15} note="모든 면이 같은 방향으로 정렬" />
             <ScoreRow label="단일 껍질" points={10} note="떠 있는 조각이 없음" />
             <ScoreRow label="삼각형 품질" points={10} note="면적이 0에 가까운 삼각형이 없음" />
-            <ScoreRow label="뚜껑 관통" points={5} note="새로 만든 면이 기존 표면을 뚫지 않음" />
+            <ScoreRow label="면끼리 관통" points={5} note="메시 전체에서 서로 뚫고 지나가는 면이 없음" />
           </div>
           <p>
-            관통 검사는 메시 전체가 아니라 새로 만든 뚜껑만 대상으로 합니다. 실제로 문제가 되는 것은
-            우리가 방금 집어넣은 면이고, 균일 격자에 삼각형을 넣어 같은 칸에 든 후보끼리만 분리축
-            검사를 하면 뚜껑 개수에 비례하는 비용으로 끝나기 때문입니다.
+            보정 전 점수는 올린 파일 그대로 잽니다. 좌표가 비트 단위로 같은 점만 합치고, 면적이 0이
+            되는 면은 위상에서 빼되 찌그러진 삼각형으로 셉니다. 허용오차 용접이나 중복 면 제거는
+            보정의 일부로 봅니다. 같은 면이 반대 방향으로 두 번 든 양면 시트를 하나로 줄이면 그
+            가장자리가 새 테두리가 되어, 올린 파일에 없던 구멍이 보정 전 점수에 잡히기 때문입니다.
+          </p>
+          <p>
+            관통은 보정 전후 모두 메시 전체를 봅니다. 삼각형 AABB를 균일 격자에 넣고 (칸, 삼각형)
+            키를 정렬해 같은 칸끼리만 분리축 검사를 합니다. 한 쌍은 두 AABB가 겹치는 영역의 최소
+            모서리가 든 칸에서 한 번만 셉니다. 점을 공유하는 쌍과 같은 평면에서 겹친 쌍은 관통으로
+            치지 않고, 1만 쌍을 찾으면 세기를 멈춥니다. 끝까지 검사하지 못하면 이 항목에 점수를 주지
+            않습니다. 77만 삼각형 결과를 1초 안에 검사합니다.
+          </p>
+          <p>
+            점수에 넣지 않는 지표가 하나 더 있습니다. 원래 바깥 표면 넓이 중 결과 표면에서 가장 긴
+            축의 0.5% 안에 남은 비율입니다. 양쪽이 모두 안쪽인 면은 출력물에서 보이지 않으므로 따로
+            셉니다. 솔리드화처럼 표면을 새로 뽑는 방법은 점수가 올라도 모양이 달라질 수 있어, 둘을
+            나란히 보여 줍니다.
+          </p>
+
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">3.8 솔리드화</h3>
+          <p>
+            3D AI 출력물에는 겹친 모서리가 수만 개, 서로 뚫고 지나가는 면이 수천 쌍 있습니다. 구멍만
+            메워서는 풀리지 않는 결함입니다. 솔리드화는 표면을 고치지 않고 부피를 다시 정합니다.
+          </p>
+          <p>
+            먼저 껍질마다 바깥을 보게 감는 방향을 맞추고, 정점 셋이 같은 면을 방향의 합으로 묶습니다.
+            반대 방향 짝은 합이 0이라 부피가 없습니다. 이 면은 가중치 0으로 남깁니다. 격자점마다
+            일반화 와인딩 넘버 w를 재고 f = |w| − 0.5를 둡니다 [13]. 먼 삼각형 묶음은 BVH 노드의 면적
+            벡터 합(쌍극자)으로 근사합니다 [14]. 구멍은 부드럽게 메워지고, 겹친 덩어리는 합쳐지며,
+            양면 시트는 상쇄됩니다.
+          </p>
+          <p>
+            다음으로 표면의 양쪽을 한 칸씩 떨어져 봅니다. 둘 다 바깥이면 두께가 없는 지느러미이거나
+            격자 한 칸보다 얇은 판입니다. 이런 면에서 0.9칸 떨어진 곳이 0이 되는 거리장을 f에 더해 최소
+            두께를 줍니다. 바깥과 이어지지 않은 속 빈 공간은 채웁니다. 연결은 마칭에 쓰는 사면체
+            분할의 에지(14방향)로 판단해 결과와 정확히 맞춥니다.
+          </p>
+          <p>
+            마지막으로 Kuhn 6-사면체 분할 위에서 f의 0-등위면을 뽑습니다. 격자점 값이 0이 아닌
+            조각별 선형 함수의 등위면이라 닫혀 있고, 모든 모서리에 면이 정확히 둘이며, 각 조각이 제
+            사면체 안에 있어 스스로 교차하지 않습니다. 표면 근처 격자점은 부호만 와인딩 넘버에서
+            가져오고 크기는 원본까지 거리로 바꿔, 위상은 그대로 두고 표면 위치만 원본에 붙입니다.
+            격자점 계산은 서로 독립이라 z층 묶음으로 나눠 여러 스레드에서 돌립니다. 교차점은 에지 양 끝 1%를 넘지 않게 두어
+            바늘 같은 삼각형을 막고, 부피 0.1% 미만의 떠 있는 조각은 버립니다. 격자는 가장 긴 축을
+            256칸으로 나누되 격자점 300만 개를 넘지 않게 하고, 입력 에지 중앙값의 1/4보다 잘게
+            나누지 않습니다.
+          </p>
+          <p>
+            대가도 분명합니다. 원래 삼각형과 UV·텍스처는 남지 않고, 삼각형 수는 입력의 2~4배가 됩니다.
+            칸 크기보다 작은 틈은 붙고 날카로운 모서리는 둥글어집니다. 그래서 자동 선택은 겹친
+            모서리나 관통이 없는 입력에서는 구멍 메우기를 먼저 해 보고, 결과가 깨끗하지 않을 때만
+            솔리드화와 점수를 비교합니다.
           </p>
         </Section>
 
         <Section number="4" title="실험">
           <h3 className="text-[15px] font-medium text-ink-100 mb-3">4.1 단계를 하나씩 뺀 실험</h3>
           <p>
-            같은 모델에 네 가지를 돌려 봅니다. 원본, 용접만, 용접한 뒤 구멍을 전부 부채꼴로 메운 것,
-            MeshCap 전체. 용접에서 점수가 오르면 그 구멍은 처음부터 없던 겁니다. 부채꼴에서 멈추고
-            MeshCap에서만 만점이면 분류와 방향 맞추기가 필요한 구멍입니다.
+            같은 모델을 올린 그대로, 용접한 뒤 구멍을 전부 부채꼴로 메운 것, 구멍 메우기, 솔리드화,
+            자동 선택으로 잽니다. 부채꼴에서 멈추고 구멍 메우기에서만 만점이면 분류와 방향 맞추기가
+            필요한 구멍입니다. 구멍 메우기도 멈추는 모델은 솔리드화가 필요한 결함입니다.
           </p>
 
           <div className="my-6 rounded-lg border border-ink-800 overflow-x-auto">
@@ -375,10 +451,11 @@ export function MethodPage() {
                 <tr className="border-b border-ink-800 bg-ink-900/60">
                   <th className="text-left font-normal text-ink-400 px-3 py-2.5">모델</th>
                   <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.raw}</th>
-                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.weldOnly}</th>
                   <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.naiveFan}</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.patch}</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.solid}</th>
                   <th className="text-right font-normal text-ink-400 px-3 py-2.5">{VARIANT_LABEL.meshcap}</th>
-                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">밀폐</th>
+                  <th className="text-right font-normal text-ink-400 px-3 py-2.5">모양 유지</th>
                 </tr>
               </thead>
               <tbody className="text-ink-300">
@@ -392,16 +469,22 @@ export function MethodPage() {
                       {model.variants.raw.score}
                     </td>
                     <td className="px-3 py-2 align-top text-right font-mono">
-                      {model.variants.weldOnly.score}
+                      {model.variants.naiveFan.score}
                     </td>
                     <td className="px-3 py-2 align-top text-right font-mono">
-                      {model.variants.naiveFan.score}
+                      {model.variants.patch.score}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right font-mono">
+                      {model.variants.solid.score}
                     </td>
                     <td className="px-3 py-2 align-top text-right font-mono text-ink-100">
                       {model.variants.meshcap.score}
+                      <div className="text-[10.5px] text-ink-500">
+                        {model.variants.meshcap.engine === 'solid' ? VARIANT_LABEL.solid : VARIANT_LABEL.patch}
+                      </div>
                     </td>
-                    <td className="px-3 py-2 align-top text-right">
-                      {model.variants.meshcap.watertight ? '예' : '아니오'}
+                    <td className="px-3 py-2 align-top text-right font-mono">
+                      {(model.variants.meshcap.shapeKept * 100).toFixed(1)}%
                     </td>
                   </tr>
                 ))}
@@ -410,35 +493,33 @@ export function MethodPage() {
           </div>
 
           <p>
-            {splitOnly && (
-              <>
-                {splitOnly.label}은 용접만으로 만점입니다. 메운 구멍이 없습니다.{' '}
-              </>
-            )}
             {bust && (
               <>
-                {bust.label}은 용접 뒤에도 테두리 {bust.variants.weldOnly.holes}개가 남고, 부채꼴은{' '}
+                {bust.label}은 올린 그대로 테두리 {bust.variants.raw.holes}개로 잡히고, 부채꼴은{' '}
                 {bust.variants.naiveFan.score}점·비다양체 에지 {bust.variants.naiveFan.nonManifoldEdges}개로
-                끝납니다. MeshCap은 분류기 기준 {filledHoles('syn-bust')}개를 메워{' '}
-                {bust.variants.meshcap.score}점, 비다양체 0입니다.{' '}
+                끝납니다. 구멍 메우기는 분류기 기준 {filledHoles('syn-bust')}개를 메워{' '}
+                {bust.variants.patch.score}점, 비다양체 0입니다.{' '}
               </>
             )}
             {worst && (
               <>
-                {worst.label}처럼 결함을 겹쳐 두면 MeshCap도 {worst.variants.meshcap.score}점에
-                머뭅니다. 밀폐는 되지만 비다양체 에지 {worst.variants.meshcap.nonManifoldEdges}개가
-                남습니다.
+                {worst.label}처럼 결함을 겹쳐 두면 구멍 메우기는 {worst.variants.patch.score}점에
+                머뭅니다. 밀폐는 되지만 비다양체 에지 {worst.variants.patch.nonManifoldEdges}개가
+                남습니다. 자동 선택은 여기서 솔리드화를 골라 {worst.variants.meshcap.score}점이 되고,
+                원래 표면의 {(worst.variants.meshcap.shapeKept * 100).toFixed(1)}%가 0.5% 안에 남습니다.
               </>
             )}
           </p>
 
-          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">4.2 3D AI 출력물</h3>
+          <h3 className="text-[15px] font-medium text-ink-100 mt-10 mb-3">4.2 3D AI 예제</h3>
           <p>
-            같은 코어를 브라우저 워커에서 3D AI STL에 적용했습니다. 원본 파일은 전송하지
-            않았습니다. 아래 수치는 이 도구로 측정한 값입니다.
+            도구 화면의 3D AI 예제 두 개(보기용으로 줄인 STL)를 같은 코어로 잰 값입니다. 점수는 올린
+            그대로에서 보정 후로 적었습니다. 시간은 파이프라인 전체를 14코어 노트북의 Node 24로 잰
+            값이고, 솔리드화는 와인딩 넘버 격자를 보조 스레드 8개로 나눠 계산했습니다. 스레드 수와
+            상관없이 결과 메시는 비트 단위로 같습니다.
           </p>
 
-          <div className="my-6 rounded-lg border border-ink-800 overflow-hidden">
+          <div className="my-6 rounded-lg border border-ink-800 overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="border-b border-ink-800 bg-ink-900/60">
@@ -448,45 +529,26 @@ export function MethodPage() {
                 </tr>
               </thead>
               <tbody className="text-ink-300">
-                <tr className="border-b border-ink-800/60">
-                  <td className="px-4 py-2">삼각형</td>
-                  <td className="px-4 py-2 font-mono">3,092,042</td>
-                  <td className="px-4 py-2 font-mono">1,896,054</td>
-                </tr>
-                <tr className="border-b border-ink-800/60">
-                  <td className="px-4 py-2">파일</td>
-                  <td className="px-4 py-2 font-mono">147 MB</td>
-                  <td className="px-4 py-2 font-mono">90 MB</td>
-                </tr>
-                <tr className="border-b border-ink-800/60">
-                  <td className="px-4 py-2">점수</td>
-                  <td className="px-4 py-2 font-mono">94 → 96</td>
-                  <td className="px-4 py-2 font-mono">97 → 99</td>
-                </tr>
-                <tr className="border-b border-ink-800/60">
-                  <td className="px-4 py-2">경계 에지</td>
-                  <td className="px-4 py-2 font-mono">120 → 0</td>
-                  <td className="px-4 py-2 font-mono">14 → 0</td>
-                </tr>
-                <tr className="border-b border-ink-800/60">
-                  <td className="px-4 py-2">밀폐</td>
-                  <td className="px-4 py-2">watertight</td>
-                  <td className="px-4 py-2">watertight</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2">브라우저</td>
-                  <td className="px-4 py-2 font-mono">약 7초</td>
-                  <td className="px-4 py-2 font-mono">약 4–10초</td>
-                </tr>
+                {AI_EXAMPLE_ROWS.map((row) => (
+                  <tr key={row.label} className="border-b border-ink-800/60 last:border-0">
+                    <td className="px-4 py-2">{row.label}</td>
+                    <td className="px-4 py-2 font-mono">{row.a}</td>
+                    <td className="px-4 py-2 font-mono">{row.b}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
           <p>
-            두 모델 모두 밀폐됩니다. 만점이 아닌 점도 점수에 남겼습니다. 3D AI B는 구멍을 메운
-            뒤 비다양체 에지가 9개에서 90개로 늘었습니다. 면 셋이 이미 공유하던 자리에 네 번째 면을
-            붙인 결과입니다. 표면을 닫는 일과 다양체로 만드는 일이 충돌했고, 채점에서 두 항목을
-            갈라 두었습니다.
+            두 예제 모두 올린 그대로는 구멍이 거의 없습니다. 대신 겹친 모서리와 서로 뚫고 지나가는
+            면이 많습니다. 구멍 메우기는 반대 방향으로 두 번 든 면을 하나로 줄이면서 테두리를 새로
+            만들고, 그 자리를 메우다 관통을 더 만들어 점수가 내려갑니다. 솔리드화는 겹친 모서리와
+            관통을 모두 없애 100점이 되고, OrcaSlicer 2.4.2도 두 결과를 manifold, 한 덩어리로
+            읽습니다. 다만 두께 없는 면에 두께를 주고 속에 묻힌 면을 지우므로 원래 모양 유지율은
+            100%가 아닙니다. 3D AI A는 표면 넓이의 절반 가까이가 격자 한 칸보다 얇아, 그 부분이
+            최소 두께를 받으면서 부피가 늘어납니다. 예전 판의 보정 전 점수는 중복 면을 지운 뒤의 상태를
+            쟀고 관통 검사를 보정 후에만 해서, 같은 파일인데도 지금 기준보다 높거나 낮게 나왔습니다.
           </p>
         </Section>
 
@@ -515,20 +577,21 @@ export function MethodPage() {
               개구부에서는 옆벽이 서로 교차할 수 있습니다.
             </Limitation>
             <Limitation>
-              벽 두께는 검사하지 않습니다. 밀폐된 메시라도 벽이 노즐 지름보다 얇으면 FDM에서 출력되지
-              않습니다. 이 판정은 슬라이서에 맡깁니다.
+              벽 두께는 따로 검사하지 않습니다. 솔리드화는 격자 한 칸보다 얇은 면에 1.8칸 두께를 주고,
+              그보다 두꺼운 벽은 그대로 둡니다. 벽이 노즐 지름보다 얇은지는 슬라이서에 맡깁니다.
             </Limitation>
             <Limitation>
-              중형 비평면 구멍은 전진 전면으로 메우고, Liepa는 작은 비평면에 남깁니다. 로컬이 못
-              닫은 테두리만 AABB 복셀 랩으로 넘기며, 모델 전체를 마칭큐브로 다시 만들지는 않습니다.
-              삼각형 300만 개 규모에서는 처리에 약 7초, 메모리 1.4GB가 필요합니다.
+              솔리드화는 표면을 새로 뽑으므로 원래 삼각형·UV·텍스처가 남지 않고 삼각형 수가 늘어납니다.
+              칸보다 작은 틈은 붙고 날카로운 모서리는 둥글어집니다. 원래 모양 유지율을 함께 보여
+              주지만, 점수에는 넣지 않습니다.
             </Limitation>
           </ul>
           <p className="mt-6">
             생성형 메시가 출력에 실패하는 이유는 구멍만이 아닙니다. 이음매 정점, 뒤집힌 면, 비다양체
-            지점이 구멍 탐지부터 속입니다. MeshCap은 그 전처리를 앞에 두고, 남은 구멍만 나눠
-            메웁니다. 브라우저에서 서비스 출력물을 닫을 수 있다는 점은 확인했습니다. 닫기와 다양체를
-            동시에 만족하지 못하는 입력은 점수에 그대로 남습니다.
+            지점이 구멍 탐지부터 속이고, 겹친 면과 관통은 구멍을 메워도 남습니다. MeshCap은 결함이
+            구멍뿐인 입력은 원래 삼각형을 지킨 채 메우고, 그렇지 않은 입력은 부피를 다시 정해 닫힌
+            표면을 새로 뽑습니다. 보정 전후는 같은 잣대로 재고, 점수가 오른 만큼 모양이 얼마나
+            달라졌는지도 함께 보여 줍니다.
           </p>
         </Section>
 
@@ -583,6 +646,14 @@ export function MethodPage() {
             <li>
               T. Ju, &ldquo;Robust repair of polygonal models,&rdquo; in <em>Proc. ACM SIGGRAPH</em>,
               2004.
+            </li>
+            <li>
+              A. Jacobson, L. Kavan, and O. Sorkine-Hornung, &ldquo;Robust Inside-Outside Segmentation
+              using Generalized Winding Numbers,&rdquo; <em>ACM Trans. Graph.</em>, 2013.
+            </li>
+            <li>
+              G. Barill, N. Dickson, R. Schmidt, D. I. W. Levin, and A. Jacobson, &ldquo;Fast Winding
+              Numbers for Soups and Clouds,&rdquo; <em>ACM Trans. Graph.</em>, 2018.
             </li>
           </ol>
         </Section>
@@ -666,9 +737,30 @@ function Pipeline() {
           <span className="ml-auto font-mono text-[10px] text-ink-700 mt-1">10</span>
         </div>
 
+        <div className="flex gap-4">
+          <div className="flex flex-col items-center shrink-0">
+            <div className="w-2 h-2 rounded-full bg-patch mt-[7px]" />
+            <div className="w-px flex-1 bg-ink-700 my-1" />
+          </div>
+          <div className="pb-4 flex-1">
+            <div className="text-[13.5px] text-ink-100">솔리드화 (겹친 모서리·관통이 있을 때)</div>
+            <div className="text-[11.5px] text-ink-400 mt-0.5">
+              와인딩 넘버로 안팎을 다시 정하고 사면체 분할 위에서 닫힌 표면을 새로 뽑음
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {['와인딩 넘버', '얇은 면 두께', '속 빈 곳 채우기', '마칭 테트라', '작은 조각 정리'].map((name) => (
+                <Badge key={name} tone="patch">
+                  {name}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <span className="ml-auto font-mono text-[10px] text-ink-700 mt-1">11</span>
+        </div>
+
         {[
-          { label: '바깥 방향 정렬', detail: '껍질별 부호 있는 부피로 안팎 판정', n: '11' },
-          { label: '검증 및 채점', detail: '밀폐 · 다양체 · 관통 검사 후 100점 환산. 점수는 진단', n: '12' },
+          { label: '바깥 방향 정렬', detail: '껍질별 부호 있는 부피로 안팎 판정', n: '12' },
+          { label: '검증 및 채점', detail: '올린 그대로와 결과를 같은 기준으로. 관통은 메시 전체', n: '13' },
         ].map((stage, index, arr) => (
           <div key={stage.label} className="flex gap-4">
             <div className="flex flex-col items-center shrink-0">

@@ -49,12 +49,12 @@ console.log(`\n${models.length}개 모델을 측정해 ${outputPath}에 저장�
 console.table(
   models.map((m) => ({
     모델: m.label,
-    '무처리 점수': m.variants.raw.score,
-    '용접만': m.variants.weldOnly.score,
+    '올린 그대로': m.variants.raw.score,
     '그냥 부채꼴': m.variants.naiveFan.score,
-    MeshCap: m.variants.meshcap.score,
-    // 정렬 전에는 뒤집힌 면의 둘레까지 구멍으로 잡힌다.
-    '정렬 전 테두리': m.variants.weldOnly.holes,
-    '실제 구멍': Object.values(m.strategyCounts).reduce((sum, n) => sum + n, 0),
+    '구멍 메우기': m.variants.patch.score,
+    솔리드화: m.variants.solid.score,
+    자동: `${m.variants.meshcap.score} (${m.variants.meshcap.engine})`,
+    '자동 시간(ms)': m.variants.meshcap.elapsedMs,
+    '모양 유지': m.variants.meshcap.shapeKept,
   })),
 );
