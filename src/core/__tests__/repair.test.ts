@@ -248,6 +248,8 @@ describe('기존 표면 부착', () => {
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
   });
 
+  // 지퍼·수술·표면 부착·전체 파이프라인을 차례로 돌려 무겁다. 2코어 CI 러너에서 다른 테스트
+  // 파일과 함께 돌면 기본 제한 5초를 넘는다.
   it('큰 안쪽 삼각형은 지우고 가늘게 갈라 긴 1-face를 지퍼한다', () => {
     const source = largeFaceLeftoverSliver();
     const before = buildTopology(source);
@@ -271,7 +273,7 @@ describe('기존 표면 부착', () => {
     const result = runPatch(source);
     expect(result.repaired.boundaryEdgeCount).toBeLessThan(before.boundaryEdgeCount);
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
-  });
+  }, 20_000);
 
   it('안쪽 면 위에 leftover 1-face를 Steiner 제약으로 넣어 붙인다', () => {
     const source = leftoverConstrainedInsert();
