@@ -33,6 +33,11 @@ export function Viewer({
     viewerRef.current = viewer;
     viewer.resize();
 
+    // dev 전용: 브라우저 자동화에서 카메라 상태를 검사하기 위한 창구.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __meshViewer: MeshViewer }).__meshViewer = viewer;
+    }
+
     const observer = new ResizeObserver(() => viewer.resize());
     observer.observe(canvas);
 

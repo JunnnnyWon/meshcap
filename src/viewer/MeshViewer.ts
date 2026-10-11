@@ -174,6 +174,10 @@ export class MeshViewer {
     const up = new Vector3();
     up.setComponent(AXIS_INDEX[input.upAxis], 1);
     this.camera.up.copy(up);
+    // OrbitControls는 회전 기준 좌표계(_quat)를 생성 시점의 camera.up으로만 잡는다.
+    // 모델의 위 축에 맞춰 다시 잡아 주지 않으면 Z-up/X-up 모델에서 수평 드래그가
+    // 턴테이블이 아니라 옆으로 넘어가는(롤) 동작이 된다.
+    syncOrbitUpFrame(this.controls, up);
     this.controls.update();
 
     const beforeGeometry = toGeometry(input.before);
@@ -363,6 +367,13 @@ export class MeshViewer {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
+}
+
+/** OrbitControls가 생성자에서 한 번만 계산하는 회전 기준 프레임을 현재 위 축에 맞춘다. */
+function syncOrbitUpFrame(controls: OrbitControls, up: Vector3): void {
+  const frame = controls as unknown as { _quat: Quaternion; _quatInverse: Quaternion };
+  frame._quat.setFromUnitVectors(up.clone().normalize(), Y_UP);
+  frame._quatInverse.copy(frame._quat).invert();
 }
 
 function lineWidthFor(edges: number): number {
