@@ -33,6 +33,7 @@ COPYFILE_DISABLE=1 tar czf - \
   --exclude 'docs/figures' \
   --exclude 'bench/exports' \
   --exclude 'bench/models' \
+  --exclude 'graphify-out' \
   --exclude '.DS_Store' \
   . | ssh "$HOST" "tar xzf - -C ~/${REMOTE_DIR}"
 

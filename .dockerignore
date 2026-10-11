@@ -8,3 +8,4 @@ bench/exports
 bench/models
 *.md
 .DS_Store
+graphify-out
