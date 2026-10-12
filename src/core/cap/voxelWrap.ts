@@ -6,7 +6,9 @@ import { computeBounds, type MeshData } from '../types.ts';
 import type { CapContext, CapPatch } from './types.ts';
 import { EMPTY_PATCH } from './types.ts';
 
-export const BROWSER_WRAP_RESOLUTION = 96;
+/** 로컬 복셀 랩 격자 한 변의 기본값. 브라우저와 서버가 같은 값을 쓴다. */
+export const DEFAULT_WRAP_RESOLUTION = 96;
+/** 계산 서버로 보낼 때 클라이언트가 실어 보내는 값. 더 촘촘히 깔아 랩 품질을 올린다. */
 export const SERVER_WRAP_RESOLUTION = 160;
 
 const MAX_NEARBY_TRIS = 480;
@@ -42,7 +44,7 @@ export function capVoxelWrap(ctx: CapContext): CapPatch {
   return wrapLoops(
     ctx.mesh,
     [ctx.metrics],
-    ctx.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+    ctx.wrapResolution ?? DEFAULT_WRAP_RESOLUTION,
     ctx.baseVertexCount,
     ctx.edgeFaceCount,
     ctx.strictManifold === true ? ctx.wouldCreateNonManifold : undefined,

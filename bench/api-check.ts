@@ -3,10 +3,12 @@
  *
  *   npx tsx bench/api-check.ts <파일...>
  *
- * 같은 코어를 쓰므로 수치가 한 자리도 달라서는 안 된다. 프로토콜 인코딩이나
- * 전송 과정에서 배열이 어긋나면 여기서 걸린다.
+ * 같은 코어를 쓰므로 수치가 한 자리도 달라서는 안 된다. 위치에 따라 달라지는
+ * 값(남은 테두리 마감 격자)은 요청에 명시해 양쪽이 같은 조건에서 돌게 한다.
+ * 프로토콜 인코딩이나 전송 과정에서 배열이 어긋나면 여기서 걸린다.
  */
 import { runPipeline } from '../src/core/pipeline.ts';
+import { DEFAULT_WRAP_RESOLUTION } from '../src/core/cap/voxelWrap.ts';
 import { encodeRepairRequest, decodeRepairResponse } from '../src/net/protocol.ts';
 import { readBinarySTL } from './readStl.ts';
 import { SYNTHETIC_BENCH_MODELS } from '../src/bench/syntheticModels.ts';
@@ -15,7 +17,8 @@ import type { MeshData } from '../src/core/types.ts';
 const BASE = process.env.MESHCAP_API ?? 'http://127.0.0.1:3111';
 
 async function check(label: string, mesh: MeshData, upAxis: 'y' | 'z') {
-  const options = { upAxis };
+  // 서버는 요청에 실린 값을 그대로 쓴다. 값을 안 실으면 브라우저 기본값으로 돌아간다.
+  const options = { upAxis, wrapResolution: DEFAULT_WRAP_RESOLUTION };
 
   const localStart = Date.now();
   const local = runPipeline(mesh, options);

@@ -5,7 +5,9 @@
  *
  * 브라우저에서 하던 것과 완전히 같은 파이프라인을 그대로 실행한다. 코어를
  * three.js에서 떼어 순수 TypeScript로 짜 둔 덕분에 코드를 한 줄도 옮겨 적지
- * 않고 재사용한다. 화면에 보이는 수치와 서버가 내놓는 수치가 어긋날 여지가 없다.
+ * 않고 재사용한다. 같은 요청이면 화면에 보이는 수치와 서버가 내놓는 수치가
+ * 어긋날 여지가 없다. 요청에 안 실린 값을 서버가 임의로 채우지 않기 때문이다
+ * (serverRunOptions 참고).
  *
  * 파일 파싱은 브라우저가 맡는다. Draco로 압축된 GLB까지 열려면 three의 로더가
  * 필요한데 그쪽은 브라우저 API에 기대는 부분이 있어, 이미 잘 도는 곳에 남겨 두고
@@ -15,6 +17,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { availableParallelism, loadavg, totalmem } from 'node:os';
 import { runPipelineAsync } from '../src/core/pipeline.ts';
 import { decodeRepairRequest, encodeRepairResponse } from '../src/net/protocol.ts';
+import { serverRunOptions } from '../src/net/serverOptions.ts';
 import { createNodeFieldEvaluator } from './fieldPool.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -93,17 +96,9 @@ const server = createServer(async (req, res) => {
     const { mesh, options } = decodeRepairRequest(buffer);
     const triangles = mesh.indices.length / 3;
 
-    // 구멍 메우기에서 브라우저는 96³, 서버는 같은 코어에 랩 해상도만 높인다.
-    const result = await runPipelineAsync(
-      mesh,
-      {
-        ...options,
-        wrapResolution: options.wrapResolution ?? 160,
-        capBudgetMs: Math.min(options.capBudgetMs ?? CAP_BUDGET_MS, CAP_BUDGET_MS),
-      },
-      undefined,
-      evaluateField,
-    );
+    // 남은 테두리 마감 격자 같은 값은 클라이언트가 정해 요청에 싣는다. 서버는
+    // 받은 값을 그대로 쓰고, 값이 없을 때만 브라우저와 같은 기본값을 채운다.
+    const result = await runPipelineAsync(mesh, serverRunOptions(options, CAP_BUDGET_MS), undefined, evaluateField);
     const payload = encodeRepairResponse(result);
 
     res.writeHead(200, {

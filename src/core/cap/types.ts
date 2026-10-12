@@ -50,7 +50,7 @@ export interface CapContext {
    * 시각 부착 모드(기본)에서는 문제 삼각형만 건너뛴다.
    */
   strictManifold?: boolean;
-  /** 로컬 복셀 랩 격자 한 변. 브라우저 96, 서버 160. */
+  /** 로컬 복셀 랩 격자 한 변. 기본 96, 계산 서버로 보낼 때는 클라이언트가 160을 실어 보낸다. */
   wrapResolution?: number;
 }
 

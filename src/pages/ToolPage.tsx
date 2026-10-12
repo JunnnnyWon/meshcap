@@ -19,10 +19,12 @@ import {
 import {
   STAGE_LABEL,
   type HoleReport,
+  type PipelineOptions,
   type PipelineResult,
   type PipelineStage,
   type RepairEngine,
 } from '../core/pipeline.ts';
+import { DEFAULT_WRAP_RESOLUTION, SERVER_WRAP_RESOLUTION } from '../core/cap/voxelWrap.ts';
 import { triangleCount } from '../core/types.ts';
 import type { UpAxis } from '../core/classify.ts';
 import type { MeshData } from '../core/types.ts';
@@ -107,7 +109,21 @@ export function ToolPage() {
       server: ServerInfo | null,
     ) => {
       const token = ++runToken.current;
-      const options = { upAxis: axis, disableFlatBase: !useFlatBase, engine: repair };
+      const baseOptions: PipelineOptions = {
+        upAxis: axis,
+        disableFlatBase: !useFlatBase,
+        engine: repair,
+      };
+      // 남은 테두리 마감 격자만 위치에 따라 다르다. 계획을 요청에 실어 보내므로
+      // 서버가 값을 임의로 바꾸지 않고, 같은 요청은 어디서 돌려도 결과가 같다.
+      const localOptions: PipelineOptions = {
+        ...baseOptions,
+        wrapResolution: DEFAULT_WRAP_RESOLUTION,
+      };
+      const serverOptions: PipelineOptions = {
+        ...baseOptions,
+        wrapResolution: SERVER_WRAP_RESOLUTION,
+      };
       const triangles = triangleCount(mesh);
 
       let wantsServer =
@@ -125,7 +141,7 @@ export function ToolPage() {
       setNotice(null);
 
       const runLocally = async () => {
-        const value = await runPipelineInWorker(mesh, options, (stage: PipelineStage) => {
+        const value = await runPipelineInWorker(mesh, localOptions, (stage: PipelineStage) => {
           if (token === runToken.current) setStatus(STAGE_LABEL[stage]);
         });
         return { value, engine: 'browser' as const };
@@ -136,7 +152,7 @@ export function ToolPage() {
 
         if (wantsServer && server) {
           try {
-            const value = await repairOnServer(mesh, options, (progress) => {
+            const value = await repairOnServer(mesh, serverOptions, (progress) => {
               if (token !== runToken.current) return;
               if (progress.phase === 'upload') {
                 setStatus(`서버로 보내는 중 ${Math.round((progress.uploaded ?? 0) * 100)}%`);
@@ -474,9 +490,9 @@ export function ToolPage() {
             {engine === 'browser'
               ? '계산은 이 브라우저에서만 돌아갑니다. 좌표도 안 나갑니다.'
               : engine === 'server'
-                ? '좌표와 인덱스만 팀 서버로 보냅니다. 텍스처와 원본 파일은 안 갑니다.'
+                ? '좌표와 인덱스만 팀 서버로 보냅니다. 남은 테두리 마감은 160³ 격자로 더 촘촘히 깔아 점수가 브라우저와 조금 다를 수 있습니다. 텍스처와 원본 파일은 안 갑니다.'
                 : serverInfo
-                  ? '모델이 크고 이 기기 메모리나 코어가 빠듯할 때만 서버로 보냅니다. 서버가 더 빠른 건 아니라서, 여유 있으면 브라우저에서 끝내는 편이 낫습니다.'
+                  ? '모델이 크고 이 기기 메모리나 코어가 빠듯할 때만 서버로 보냅니다. 서버로 보내면 남은 테두리 마감이 160³으로 더 촘촘해집니다. 서버가 더 빠른 건 아니라서, 여유 있으면 브라우저에서 끝내는 편이 낫습니다.'
                   : '계산 서버에 연결되지 않아 브라우저에서만 돌립니다.'}
           </p>
 

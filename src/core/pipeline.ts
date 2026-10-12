@@ -9,7 +9,7 @@ import {
   type LoopMetrics,
 } from './classify.ts';
 import { applyCap } from './cap/index.ts';
-import { wrapLoops, wrapBoundaryClusters, BROWSER_WRAP_RESOLUTION } from './cap/voxelWrap.ts';
+import { wrapLoops, wrapBoundaryClusters, DEFAULT_WRAP_RESOLUTION } from './cap/voxelWrap.ts';
 import { bridgeLeftoverTears } from './bridge.ts';
 import { orientOutward } from './normals.ts';
 import { validateMesh, type ValidationReport } from './validate.ts';
@@ -71,7 +71,7 @@ export interface PipelineOptions extends ClassifyOptions {
    * 기본(시각 부착)은 문제 삼각형만 건너뛴다.
    */
   strictManifold?: boolean;
-  /** 로컬 복셀 랩 격자 한 변. 브라우저 기본 96, 서버는 160. */
+  /** 로컬 복셀 랩 격자 한 변. 기본 96, 계산 서버로 보낼 때는 클라이언트가 160을 실어 보낸다. */
   wrapResolution?: number;
   /** 로컬 채움 뒤 남은 테두리 랩을 끈다. 절제 실험용. */
   disableWrap?: boolean;
@@ -720,7 +720,7 @@ function runPatchEngine(
           edgeFaceCount: (a, b) => incidence.count(a, b),
           vertexMeanEdge,
           strictManifold: options.strictManifold === true,
-          wrapResolution: options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+          wrapResolution: options.wrapResolution ?? DEFAULT_WRAP_RESOLUTION,
         });
 
         appendAll(extraPositions, outcome.newPositions);
@@ -936,7 +936,7 @@ function attachLeftoverTears(
           edgeFaceCount: (a, b) => incidence.count(a, b),
           vertexMeanEdge,
           strictManifold: options.strictManifold === true,
-          wrapResolution: options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+          wrapResolution: options.wrapResolution ?? DEFAULT_WRAP_RESOLUTION,
         });
         appendAll(extraPositions, outcome.newPositions);
         appendAll(extraTriangles, outcome.triangles);
@@ -965,7 +965,7 @@ function attachLeftoverTears(
   if (!options.disableWrap && !over() && buildTopology(working).boundaryEdgeCount > 0) {
     const clustered = wrapBoundaryClusters(
       working,
-      options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+      options.wrapResolution ?? DEFAULT_WRAP_RESOLUTION,
       options.strictManifold === true,
       left(),
     );
@@ -1086,7 +1086,7 @@ function applyLeftoverWrap(
   const patch = wrapLoops(
     mesh,
     wrapTargets,
-    options.wrapResolution ?? BROWSER_WRAP_RESOLUTION,
+    options.wrapResolution ?? DEFAULT_WRAP_RESOLUTION,
     mesh.positions.length / 3,
     (a, b) => incidence.count(a, b),
     options.strictManifold === true ? (a, b, c) => incidence.wouldCreateNonManifold(a, b, c) : undefined,
