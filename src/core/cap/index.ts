@@ -167,19 +167,30 @@ function fairPatch(ctx: CapContext, patch: CapPatch): CapPatch {
   return next;
 }
 
-function fallbackChain(ctx: CapContext, planned: CapStrategy): CapPatch[] {
+interface FallbackStep {
+  strategy: CapStrategy;
+  patch: CapPatch;
+}
+
+/**
+ * 후보를 정해진 순서로 모두 만들어 둔다. 어느 후보가 남았는지 그대로 보고해야
+ * 하므로 전략 이름을 함께 들고 다니고, 평가 시점은 예전과 같게 유지한다.
+ */
+function fallbackChain(ctx: CapContext, planned: CapStrategy): FallbackStep[] {
   const n = ctx.metrics.vertices.length;
-  const chain: CapPatch[] = [];
+  const chain: FallbackStep[] = [];
   if (planned === 'front') {
-    if (n <= DEFAULT_CLASSIFY_OPTIONS.liepaMaxVertices) chain.push(capLiepa(ctx));
-    chain.push(capPlanar(ctx));
+    if (n <= DEFAULT_CLASSIFY_OPTIONS.liepaMaxVertices) {
+      chain.push({ strategy: 'liepa', patch: capLiepa(ctx) });
+    }
+    chain.push({ strategy: 'planar', patch: capPlanar(ctx) });
   } else if (planned === 'wrap') {
-    chain.push(capFront(ctx));
-    chain.push(capPlanar(ctx));
+    chain.push({ strategy: 'front', patch: capFront(ctx) });
+    chain.push({ strategy: 'planar', patch: capPlanar(ctx) });
   } else if (planned === 'liepa') {
-    chain.push(capPlanar(ctx));
+    chain.push({ strategy: 'planar', patch: capPlanar(ctx) });
   }
-  chain.push(capFan(ctx));
+  chain.push({ strategy: 'fan', patch: capFan(ctx) });
   return chain;
 }
 
@@ -205,10 +216,10 @@ export function applyCap(ctx: CapContext): CapOutcome {
     return { ...primary, appliedStrategy: planned, fellBack: false };
   }
 
-  for (const raw of fallbackChain(ctx, planned)) {
-    const committed = commitManifold(ctx, fairPatch(ctx, raw));
+  for (const { strategy, patch } of fallbackChain(ctx, planned)) {
+    const committed = commitManifold(ctx, fairPatch(ctx, patch));
     if (committed.triangles.length > 0) {
-      return { ...committed, appliedStrategy: 'fan', fellBack: true };
+      return { ...committed, appliedStrategy: strategy, fellBack: true };
     }
   }
 

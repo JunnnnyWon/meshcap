@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { runPipeline, type PipelineOptions } from '../pipeline.ts';
 import type { MeshData } from '../types.ts';
 import { capLiepa } from '../cap/liepa.ts';
+import { applyCap, type CapContext } from '../cap/index.ts';
 import { refineAndFair } from '../cap/refine.ts';
 import { buildTopology } from '../halfEdge.ts';
 import { traceBoundaryLoops, traceFillableLoops } from '../boundary.ts';
@@ -263,5 +264,34 @@ describe('열린 사슬과 시각 부착', () => {
     const loops = [{ vertices: [4, 5, 6, 7], closed: false }];
     const [hole] = classifyLoops(mesh, loops, {}, computeBounds(mesh.positions));
     expect(hole.strategy).not.toBe('skip');
+  });
+});
+
+describe('구멍 하나 메우기', () => {
+  /**
+   * 전진 전면은 새 정점을 쓸 수 없으면 삼각형을 하나도 만들지 못한다. 그때 다음
+   * 후보인 Liepa가 남는데, 보고는 부채꼴로 나가고 있었다. 어떤 후보가 실제로
+   * 구멍을 닫았는지 구멍 목록과 벤치가 그대로 보여 주므로 후보 이름이 맞아야 한다.
+   */
+  it('폴백이 일어나면 실제로 성공한 전략을 보고한다', () => {
+    const mesh = openCube();
+    const [hole] = classify(mesh);
+    const ctx: CapContext = {
+      mesh,
+      // 평면성을 0으로 두어 페어링이 끼어들지 않게 한다.
+      metrics: { ...hole, strategy: 'front', planarity: 0 },
+      baseVertexCount: mesh.positions.length / 3,
+      bounds: computeBounds(mesh.positions),
+      upIndex: 1,
+      edgeFaceCount: () => 0,
+      strictManifold: true,
+      wouldCreateNonManifold: () => true,
+    };
+
+    const outcome = applyCap(ctx);
+
+    expect(outcome.fellBack).toBe(true);
+    expect(outcome.appliedStrategy).toBe('liepa');
+    expect(outcome.triangles.length).toBeGreaterThan(0);
   });
 });
