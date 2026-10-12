@@ -28,6 +28,7 @@ import {
   longestExtent,
   measureFidelity,
   planSolidGrid,
+  sealOpenLoops,
   solidify,
   solidifyWithField,
   TriangleBVH,
@@ -496,10 +497,13 @@ function* runSolidEngine(
 ): Generator<FieldRequest, EngineRun, Float32Array> {
   stage('soup');
   const { stats: soupStats, bvh } = clock.time('soup', '방향 맞추고 겹친 면 정리', () => {
+    // 열린 테두리를 먼저 막는다. 구멍이 남아 있으면 껍질 속이 덜 세어져 등위면이
+    // 원본 표면에 붙지 못하고, 표면이 거칠어지면서 빈 공간까지 메워진다.
+    const sealed = sealOpenLoops(asIs);
     // 껍질마다 바깥을 보게 맞춰야, 겹친 덩어리의 와인딩 넘버가 서로 상쇄되지 않는다.
-    const oriented = orientOutward(asIs).mesh;
+    const oriented = orientOutward(sealed.mesh).mesh;
     const built = buildSoup(oriented);
-    return { ...built, bvh: new TriangleBVH(built.soup) };
+    return { ...built, stats: { ...built.stats, sealedLoops: sealed.sealedLoops }, bvh: new TriangleBVH(built.soup) };
   });
   const solidOptions = { ...options.solid, onPhase: (phase: PipelineStage) => stage(phase) };
   const grid = planSolidGrid(bvh.coords, bvh.count, solidOptions);

@@ -3,6 +3,7 @@ import type { MeshData } from '../types.ts';
 import { TriangleBVH, type TriangleSoup } from './bvh.ts';
 
 export { TriangleBVH } from './bvh.ts';
+export { sealOpenLoops } from './seal.ts';
 export {
   computeWindingSlab,
   planSolidGrid,
@@ -22,6 +23,8 @@ export interface SoupStats {
   duplicateTriangles: number;
   /** 와인딩 넘버에 실제로 더하는 면 수. */
   windingTriangles: number;
+  /** 격자를 만들기 전에 뚜껑을 씌운 열린 테두리 수. sealOpenLoops를 거친 경우에만 있다. */
+  sealedLoops?: number;
 }
 
 /**

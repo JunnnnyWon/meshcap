@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildSoup, measureFidelity, solidify, soupFromMesh, TriangleBVH } from '../solid/index.ts';
+import { buildSoup, measureFidelity, sealOpenLoops, solidify, soupFromMesh, TriangleBVH } from '../solid/index.ts';
+import { buildTopology } from '../halfEdge.ts';
 import { runPipeline } from '../pipeline.ts';
 import { validateMesh } from '../validate.ts';
-import { cube, openCube } from '../__fixtures__/shapes.ts';
+import { cube, openCube, openCylinder } from '../__fixtures__/shapes.ts';
 import type { MeshData } from '../types.ts';
 
 /** 바깥을 보게 감은 축 정렬 상자. */
@@ -189,5 +190,40 @@ describe('자동 선택', () => {
     expect(result.engine).toBe('solid');
     expect(result.repaired.nonManifoldEdgeCount).toBe(0);
     expect(result.repairedScore.total).toBe(100);
+  });
+});
+
+describe('열린 테두리 뚜껑', () => {
+  /**
+   * 와인딩 넘버는 표면이 닫혀 있어야 껍질 속을 1로 센다. 구멍이 남아 있으면 속이
+   * 덜 세어져 0.5에 못 미치고, 등위면이 원본 표면에 붙지 못한 채 거칠어진다.
+   * 그래서 격자를 만들기 전에 열린 테두리를 막는다.
+   */
+  it('구멍마다 중심점 뚜껑을 씌워 닫는다', () => {
+    const open = openCube();
+    const sealed = sealOpenLoops(open);
+
+    expect(sealed.sealedLoops).toBe(1);
+    expect(buildTopology(sealed.mesh).boundaryEdgeCount).toBe(0);
+    // 뚫린 사각형이라 삼각형 네 장과 중심 정점 하나가 붙는다.
+    expect(sealed.mesh.indices.length / 3).toBe(open.indices.length / 3 + 4);
+  });
+
+  it('닫힌 메시는 그대로 돌려준다', () => {
+    const mesh = cube();
+    const sealed = sealOpenLoops(mesh);
+
+    expect(sealed.sealedLoops).toBe(0);
+    expect(sealed.mesh).toBe(mesh);
+  });
+
+  it('뚜껑을 씌우면 결과 표면이 원본을 따라간다', () => {
+    const result = runPipeline(openCylinder(24), { engine: 'solid' });
+
+    expect(result.solid!.soup.sealedLoops).toBe(2);
+    expect(result.repaired.watertight).toBe(true);
+    expect(result.repaired.connectedComponents).toBe(1);
+    // 원본에서 떨어진 새 면 없이 전부 원본 표면을 따라 뽑힌다.
+    expect(result.solid!.newTriangles).toBe(0);
   });
 });
