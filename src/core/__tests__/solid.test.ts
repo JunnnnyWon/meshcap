@@ -130,7 +130,7 @@ describe('솔리드화', () => {
     const result = solidify(bvh);
     const report = expectPrintable(result.mesh);
     expect(result.stats.thickenedTriangles).toBeGreaterThan(0);
-    // 판 넓이 0.6 × 0.6에 두께 약 2 × 0.9칸이 더해진다.
+    // 판 넓이 0.6 × 0.6에 두께 약 2 × 0.5칸이 더해진다.
     const expected = 0.36 * 2 * result.stats.finRadius;
     expect(report.volume).toBeGreaterThan(0.9 + expected * 0.4);
     expect(report.connectedComponents).toBe(1);

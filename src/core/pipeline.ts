@@ -43,7 +43,7 @@ export type RepairEngine = 'auto' | 'solid' | 'patch';
 export interface SolidEngineOptions {
   /** 가장 긴 축의 격자 칸 수. 기본 256. */
   resolution?: number;
-  /** 두께 없는 면에 줄 두께의 절반, 격자 칸 단위. 기본 0.9. */
+  /** 두께 없는 면에 줄 두께의 절반, 격자 칸 단위. 기본 0.5. */
   finRadiusVoxels?: number;
   /** 전체 부피 대비 이보다 작은 떠 있는 조각은 버린다. 기본 0.001. */
   minShellVolumeRatio?: number;
