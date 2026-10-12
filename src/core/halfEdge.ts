@@ -38,6 +38,16 @@ export interface Topology {
   connectedComponents: number;
   /** 경계 half-edge가 두 개 이상 나가는 정점. 나비넥타이(bowtie) 형태다. */
   nonManifoldVertexCount: number;
+  /**
+   * 면이 셋 이상 접한 에지의 정점 쌍.
+   *
+   * 개수만으로는 어디를 손봐야 하는지 알 수 없어 목록으로도 내보인다. 이런 에지는
+   * 보통 드물어서, 세어 둔 만큼만 잡으면 메모리 부담이 없다.
+   */
+  nonManifoldLo: Uint32Array;
+  nonManifoldHi: Uint32Array;
+  /** 비다양체 에지에 접한 첫 면. 국소 수리의 시드로 쓴다. */
+  nonManifoldFace: Uint32Array;
   /** V - E + F. 닫힌 구 위상이면 2가 된다. */
   eulerCharacteristic: number;
 }
@@ -182,6 +192,20 @@ export function buildTopology(mesh: MeshData): Topology {
     unmatchedHalfEdgeCount += Math.abs(forward[id] - backward[id]);
   }
 
+  const nonManifoldLo = new Uint32Array(nonManifoldEdgeCount);
+  const nonManifoldHi = new Uint32Array(nonManifoldEdgeCount);
+  const nonManifoldFace = new Uint32Array(nonManifoldEdgeCount);
+  if (nonManifoldEdgeCount > 0) {
+    let slot = 0;
+    for (let id = 0; id < edgeCount; id++) {
+      if (forward[id] + backward[id] < 3) continue;
+      nonManifoldLo[slot] = edgeLo[id];
+      nonManifoldHi[slot] = edgeHi[id];
+      nonManifoldFace[slot] = firstFace[id];
+      slot++;
+    }
+  }
+
   const boundaryFrom = new Uint32Array(unmatchedHalfEdgeCount);
   const boundaryTo = new Uint32Array(unmatchedHalfEdgeCount);
   const boundaryFace = new Uint32Array(unmatchedHalfEdgeCount);
@@ -266,6 +290,9 @@ export function buildTopology(mesh: MeshData): Topology {
     fillFace,
     connectedComponents,
     nonManifoldVertexCount,
+    nonManifoldLo,
+    nonManifoldHi,
+    nonManifoldFace,
     eulerCharacteristic: usedVertexCount - edgeCount + triangleCount,
   };
 }

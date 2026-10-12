@@ -16,6 +16,11 @@ export interface IntersectionOptions {
   cap?: number;
   /** 분리축 검사 상한. 면이 한 점에 수만 장 몰린 병적인 입력에서 멈추게 한다. */
   pairTestLimit?: number;
+  /**
+   * 뚫고 지나가는 쌍을 여기에 모은다. 어디를 손봐야 하는지 알려면 개수로는
+   * 부족하다. 삼각형 인덱스 두 개씩 이어 붙이며, cap에 닿으면 모으기도 멈춘다.
+   */
+  pairs?: number[];
 }
 
 const DEFAULT_CAP = 10_000;
@@ -42,6 +47,7 @@ export function countSelfIntersections(mesh: MeshData, options: IntersectionOpti
   const F = indices.length / 3;
   const cap = options.cap ?? DEFAULT_CAP;
   const pairLimit = options.pairTestLimit ?? DEFAULT_PAIR_TEST_LIMIT;
+  const pairs = options.pairs;
   const empty = { count: 0, complete: true, capped: false, pairTests: 0 };
   if (F < 2) return empty;
 
@@ -216,6 +222,7 @@ export function countSelfIntersections(mesh: MeshData, options: IntersectionOpti
           pairTests++;
           if (trianglesIntersect(positions, indices, s, t, eps)) {
             count++;
+            pairs?.push(s, t);
             if (count >= cap) return { count, complete: true, capped: true, pairTests };
           }
         }
@@ -235,6 +242,7 @@ export function countSelfIntersections(mesh: MeshData, options: IntersectionOpti
       pairTests++;
       if (trianglesIntersect(positions, indices, s, t, eps)) {
         count++;
+        pairs?.push(s, t);
         if (count >= cap) return { count, complete: true, capped: true, pairTests };
       }
     }
